@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reel Prop Firms EV</title>
+<style>
+  @font-face { font-family: "Inter"; src: url(assets/fonts/Inter.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JBM"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 700; }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const params = new URLSearchParams(location.search);
+const CONFIG = {
+  handle: params.get("handle") || "@tu_handle",
+  captions: params.get("captions") !== "0",
+};
+const W = 1080, H = 1920;
+const DURATION = 66;
+
+const C = {
+  green: "#22c55e", greenSoft: "#4ade80", red: "#ef4444", redSoft: "#f87171",
+  gold: "#facc15", white: "#ffffff", ink: "#0b0f17", panel: "rgba(14,18,28,0.92)",
+  panelLine: "rgba(255,255,255,0.10)", muted: "rgba(255,255,255,0.62)",
+  claude: "#d97757", user: "#2b3445",
+};
+const F = (w, s, fam = "Inter") => `${w} ${s}px ${fam}, DejaVu Sans, sans-serif`;
+
+// ============================================================
+//  HELPERS
+// ============================================================
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeIn = k => k * k * k;
+const easeInOut = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const backOut = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const p = (t, a, b) => clamp((t - a) / (b - a));          // linear 0..1
+const pe = (t, a, b, e = easeOut) => e(p(t, a, b));        // eased 0..1
+// scene alpha: fades in over [a, a+fi], out over [b-fo, b]
+const sceneAlpha = (t, a, b, fi = .35, fo = .35) => Math.min(p(t, a, a + fi), 1 - p(t, b - fo, b));
+const fmt = n => Math.round(n).toLocaleString("es-ES").replace(/ /g, ".").replace(/\s/g, ".");
+const fmtThousands = n => { const s = Math.round(n).toString(); return s.replace(/\B(?=(\d{3})+(?!\d))/g, "."); };
+
+let ctx;
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function text(s, x, y, font, color = C.white, align = "center", base = "middle") {
+  ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; ctx.fillText(s, x, y);
+}
+function wrap(s, maxW, font) {
+  ctx.font = font; const words = s.split(" "); const lines = []; let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line); return lines;
+}
+function withAlpha(a, fn) { if (a <= 0) return; ctx.save(); ctx.globalAlpha *= a; fn(); ctx.restore(); }
+function shadow(blur = 30, color = "rgba(0,0,0,.45)", oy = 10) { ctx.shadowBlur = blur; ctx.shadowColor = color; ctx.shadowOffsetY = oy; }
+function noShadow() { ctx.shadowBlur = 0; ctx.shadowColor = "transparent"; ctx.shadowOffsetY = 0; }
+// deterministic pseudo-random
+function rnd(i) { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+// ============================================================
+//  ASSETS
+// ============================================================
+const imgBg = new Image(); imgBg.src = "assets/fondo-chart.png";
+const imgPayout = new Image(); imgPayout.src = "assets/payout-lucid.png";
+
+// ============================================================
+//  BACKGROUND (the user's chart, slow pan + dark grade)
+// ============================================================
+function drawBackground(t) {
+  const ih = imgBg.naturalHeight, iw = imgBg.naturalWidth;
+  const s = H / ih * 1.04;
+  const dw = iw * s, dh = ih * s;
+  const maxX = dw - W;
+  const x = -maxX * easeInOut(clamp(t / DURATION));
+  const y = -(dh - H) / 2 + Math.sin(t * .25) * 6;
+  ctx.drawImage(imgBg, x, y, dw, dh);
+  // grade: dark navy tint so the gray chart reads as a moody trading screen
+  ctx.fillStyle = "rgba(6,10,20,0.70)"; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H * .45, 200, W / 2, H * .5, H * .75);
+  g.addColorStop(0, "rgba(30,60,120,0.10)"); g.addColorStop(1, "rgba(0,0,0,0.65)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// ============================================================
+//  COMMON UI
+// ============================================================
+function claudeIcon(cx, cy, r, t = 0, color = C.claude) {
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * .6);
+  ctx.strokeStyle = color; ctx.lineCap = "round"; ctx.lineWidth = r * .22;
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2, len = r * (i % 2 ? .78 : 1);
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * .18, Math.sin(a) * r * .18); ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len); ctx.stroke();
+  }
+  ctx.restore();
+}
+function chip(label, t, a, b) {
+  const al = sceneAlpha(t, a, b, .4, .3);
+  withAlpha(al, () => {
+    ctx.font = F(800, 26); const w = ctx.measureText(label).width + 48;
+    rr(W / 2 - w / 2, 214, w, 50, 25); ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 2; ctx.stroke();
+    text(label, W / 2, 240, F(800, 26), "rgba(255,255,255,0.85)");
+  });
+}
+// AI headline bubble used from scene 2 onward
+function aiBubble(msg, t, a, b, y = 290, opts = {}) {
+  const al = sceneAlpha(t, a, b, .35, .3);
+  if (al <= 0) return;
+  const k = pe(t, a, a + .45, backOut);
+  const font = F(700, opts.size || 38);
+  const lines = wrap(msg, 760, font);
+  const lh = (opts.size || 38) * 1.28;
+  const bh = Math.max(110, lines.length * lh + 52);
+  // streaming text: reveal characters
+  const total = msg.length;
+  const shown = Math.floor(total * p(t, a + .15, a + .15 + Math.min(1.6, total * .028)));
+  withAlpha(al, () => {
+    ctx.save(); ctx.translate(0, (1 - k) * 30);
+    shadow(40, "rgba(0,0,0,.5)", 14);
+    rr(60, y, 960, bh, 30); ctx.fillStyle = C.panel; ctx.fill(); noShadow();
+    ctx.strokeStyle = "rgba(217,119,87,0.45)"; ctx.lineWidth = 2.5; ctx.stroke();
+    claudeIcon(118, y + 56, 26, t, C.claude);
+    let count = 0;
+    lines.forEach((ln, i) => {
+      const rem = clamp(shown - count, 0, ln.length);
+      text(ln.slice(0, rem), 170, y + 26 + lh / 2 + i * lh, font, C.white, "left");
+      count += ln.length + 1;
+    });
+    ctx.restore();
+  });
+  return bh;
+}
+function formulaBox(str, t, a, b, y = 1385, color = C.white, size = 44) {
+  const al = sceneAlpha(t, a, b, .35, .3);
+  withAlpha(al, () => {
+    const k = pe(t, a, a + .5, backOut);
+    ctx.save(); ctx.translate(W / 2, y); ctx.scale(.85 + .15 * k, .85 + .15 * k);
+    ctx.font = F(700, size, "JBM"); const w = Math.min(1000, ctx.measureText(str).width + 70);
+    shadow(30, "rgba(0,0,0,.5)", 8);
+    rr(-w / 2, -48, w, 96, 22); ctx.fillStyle = "rgba(0,0,0,0.72)"; ctx.fill(); noShadow();
+    ctx.strokeStyle = "rgba(250,204,21,0.55)"; ctx.lineWidth = 2.5; ctx.stroke();
+    text(str, 0, 2, F(700, size, "JBM"), color);
+    ctx.restore();
+  });
+}
+
+// ============================================================
+//  CHARACTER (minimal "muñeco")
+// ============================================================
+function cashBundle(x, y, s = 1, rot = 0, label = "1.000 $") {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  for (let i = 3; i >= 0; i--) {
+    rr(-70 + i * 3, -38 - i * 5, 140, 76, 8); ctx.fillStyle = i ? "#15803d" : "#22a355"; ctx.fill();
+    ctx.strokeStyle = "#0d5c2b"; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.fillStyle = "#fef3c7"; ctx.fillRect(-14, -38, 28, 76);
+  text("$", -42, 0, F(900, 34), "#bbf7d0"); text("$", 42, 0, F(900, 34), "#bbf7d0");
+  ctx.restore();
+  if (label) text(label, x, y + 66 * s, F(900, 30 * s), C.greenSoft);
+}
+function figure(x, y, s, t, opts = {}) {
+  // x,y = feet center
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const bob = Math.sin(t * 3) * 3;
+  ctx.strokeStyle = "#f1f5f9"; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 14;
+  // legs
+  ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(-10, -120); ctx.lineTo(10, -120); ctx.lineTo(28, 0); ctx.stroke();
+  // body
+  rr(-46, -260 + bob, 92, 150, 40); ctx.fillStyle = "#334155"; ctx.fill(); ctx.stroke();
+  // head
+  ctx.beginPath(); ctx.arc(0, -318 + bob, 48, 0, Math.PI * 2); ctx.fillStyle = "#f1f5f9"; ctx.fill();
+  // eyes
+  ctx.fillStyle = C.ink;
+  const look = opts.look || 0;
+  ctx.beginPath(); ctx.arc(-15 + look * 8, -322 + bob, 6, 0, 7); ctx.arc(15 + look * 8, -322 + bob, 6, 0, 7); ctx.fill();
+  // smile
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(look * 6, -306 + bob, 14, .2 * Math.PI, .8 * Math.PI); ctx.stroke();
+  // arms
+  ctx.strokeStyle = "#f1f5f9"; ctx.lineWidth = 14;
+  const raise = opts.raise ?? 0;
+  ctx.beginPath(); ctx.moveTo(-40, -230 + bob); ctx.lineTo(-90, -170 + bob - raise * 60); ctx.lineTo(-70 + raise * 10, -120 + bob - raise * 120); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(40, -230 + bob); ctx.lineTo(90, -170 + bob - raise * 60); ctx.lineTo(70 - raise * 10, -120 + bob - raise * 120); ctx.stroke();
+  ctx.restore();
+  return { handY: y + s * (-120 + bob - raise * 120), handX: x };
+}
+
+// ============================================================
+//  SCENE 1 + 2 : chat with the AI
+// ============================================================
+const Q = "Tengo 1.000 $ y un 52 % de winrate. ¿Puedo ser rentable con prop firms?";
+const A1 = "Sí. Primero tienes que entender el EV: el valor esperado. Lo que ganas de media cada vez que repites algo.";
+
+function chatPanel(t) {
+  // visible 0 → ~7.6, then collapses
+  const appear = pe(t, 0.05, .6, backOut);
+  const collapse = pe(t, 6.9, 7.7, easeInOut);
+  if (t > 7.7) return;
+  const al = Math.min(p(t, 0, .4), 1 - p(t, 7.3, 7.7));
+  withAlpha(al, () => {
+    const x = 60, w = 960, y = 300 - collapse * 60, h = 780;
+    ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(.9 + .1 * appear, .9 + .1 * appear); ctx.translate(-W / 2, -(y + h / 2));
+    shadow(60, "rgba(0,0,0,.6)", 20);
+    rr(x, y, w, h, 36); ctx.fillStyle = C.panel; ctx.fill(); noShadow();
+    ctx.strokeStyle = C.panelLine; ctx.lineWidth = 2; ctx.stroke();
+    // header
+    claudeIcon(x + 62, y + 62, 24, t);
+    text("Claude", x + 104, y + 62, F(800, 36), C.white, "left");
+    text("● en línea", x + w - 40, y + 62, F(600, 26), C.greenSoft, "right");
+    ctx.fillStyle = C.panelLine; ctx.fillRect(x, y + 118, w, 2);
+
+    // input bar
+    const iy = y + h - 120;
+    rr(x + 30, iy, w - 60, 90, 45); ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.14)"; ctx.stroke();
+    const typed = Math.floor(Q.length * p(t, .6, 3.4));
+    const sent = t >= 3.7;
+    const inFont = F(500, 30);
+    if (!sent) {
+      const s = Q.slice(0, typed);
+      ctx.save(); rr(x + 30, iy, w - 690 + 630, 90, 45); ctx.clip();
+      ctx.font = inFont; const tw = ctx.measureText(s).width;
+      const off = Math.max(0, tw - (w - 230));
+      text(s || "Pregunta lo que quieras…", x + 70 - off, iy + 46, inFont, s ? C.white : "rgba(255,255,255,.35)", "left");
+      if (Math.floor(t * 2.2) % 2 === 0 || (t > .6 && t < 3.4)) { ctx.fillStyle = C.white; ctx.fillRect(x + 74 + tw - off, iy + 26, 3, 40); }
+      ctx.restore();
+    } else text("Pregunta lo que quieras…", x + 70, iy + 46, inFont, "rgba(255,255,255,.35)", "left");
+    // send button
+    const pulse = t > 3.3 && t < 3.8 ? 1 + Math.sin((t - 3.3) * 20) * .08 : 1;
+    ctx.save(); ctx.translate(x + w - 76, iy + 45); ctx.scale(pulse, pulse);
+    ctx.beginPath(); ctx.arc(0, 0, 32, 0, 7); ctx.fillStyle = typed > 0 && !sent ? C.claude : "rgba(255,255,255,.15)"; ctx.fill();
+    ctx.strokeStyle = C.white; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 13); ctx.lineTo(0, -13); ctx.moveTo(-11, -2); ctx.lineTo(0, -13); ctx.lineTo(11, -2); ctx.stroke();
+    ctx.restore();
+
+    // messages
+    let my = y + 160;
+    if (sent) {
+      const k = pe(t, 3.7, 4.1, backOut);
+      const font = F(600, 34); const lines = wrap(Q, 640, font); const lh = 46;
+      const bw = 700, bh = lines.length * lh + 44;
+      ctx.save(); ctx.globalAlpha *= p(t, 3.7, 3.9); ctx.translate(0, (1 - k) * 80);
+      rr(x + w - 30 - bw, my, bw, bh, 28); ctx.fillStyle = C.user; ctx.fill();
+      lines.forEach((ln, i) => text(ln, x + w - 30 - bw + 32, my + 22 + lh / 2 + i * lh, font, C.white, "left"));
+      ctx.restore();
+      my += bh + 34;
+    }
+    // AI typing / answer
+    if (t >= 4.2) {
+      claudeIcon(x + 66, my + 34, 22, t * 2);
+      if (t < 5.25) {
+        for (let i = 0; i < 3; i++) {
+          const yy = Math.sin(t * 9 - i * .8) * 6;
+          ctx.beginPath(); ctx.arc(x + 130 + i * 30, my + 34 + yy, 9, 0, 7); ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fill();
+        }
+      } else {
+        const font = F(600, 36); const lines = wrap(A1, 760, font); const lh = 50;
+        const shown = Math.floor(A1.length * p(t, 5.25, 6.6));
+        let count = 0;
+        lines.forEach((ln, i) => {
+          const rem = clamp(shown - count, 0, ln.length);
+          text(ln.slice(0, rem), x + 112, my + 34 + i * lh, font, C.white, "left");
+          count += ln.length + 1;
+        });
+      }
+    }
+    ctx.restore();
+  });
+}
+
+function scene1(t) {
+  if (t > 7.8) return;
+  chip("1.000 $ · 52 % WR · PROP FIRMS", t, 0, 15);
+  chatPanel(t);
+  // character with cash in front of the screen (visible in scene 1 only)
+  const al = Math.min(p(t, .2, .8), 1 - p(t, 4.6, 5.2));
+  withAlpha(al, () => {
+    const k = pe(t, .2, .9, backOut);
+    const fx = 300, fy = 1640 + (1 - k) * 200;
+    const hand = figure(fx, fy, .95, t, { look: 1, raise: .55 });
+    cashBundle(fx + 150, hand.handY - 40, 1, -.15 + Math.sin(t * 2) * .04);
+    // thought bubble
+    withAlpha(pe(t, 1.0, 1.4), () => {
+      rr(560, 1250, 420, 110, 55); ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(520, 1380, 16, 0, 7); ctx.arc(480, 1415, 9, 0, 7); ctx.fill();
+      text("¿52 % basta?", 770, 1305, F(900, 44), C.ink);
+    });
+  });
+}
+
+// ============================================================
+//  SCENE 2 : EV + balanza
+// ============================================================
+function coinsPile(cx, baseY, n, color, dark, shownN) {
+  // pile of small coins (ellipses), bottom row widest
+  const rows = [13, 12, 11, 9, 7, 4, 2, 1, 1];
+  let idx = 0;
+  for (let r = 0; r < rows.length && idx < n; r++) {
+    const cnt = Math.min(rows[r], n - idx);
+    for (let i = 0; i < cnt; i++, idx++) {
+      if (idx >= shownN) return;
+      const xx = cx + (i - (cnt - 1) / 2) * 19;
+      const yy = baseY - r * 13;
+      ctx.beginPath(); ctx.ellipse(xx, yy + 3, 11, 6, 0, 0, 7); ctx.fillStyle = dark; ctx.fill();
+      ctx.beginPath(); ctx.ellipse(xx, yy, 11, 6, 0, 0, 7); ctx.fillStyle = color; ctx.fill();
+    }
+  }
+}
+function scene2(t) {
+  if (t < 4.8 || t > 15.2) return;
+  chip("01 · ¿QUÉ ES EL EV?", t, 7.2, 15);
+  aiBubble("Con un 52 % de acierto a ratio 1:1, cada trade te deja de media +4 % de lo que arriesgas.", t, 7.2, 15);
+  const al = sceneAlpha(t, 7.5, 15, .4, .35);
+  withAlpha(al, () => {
+    const cx = W / 2, pivotY = 760;
+    const drop = p(t, 8.0, 10.6);
+    const nG = Math.floor(52 * drop), nR = Math.floor(48 * drop);
+    // tilt: balanced while filling, then leans a bit to green
+    const ang = (nG - nR) * 0.012 + pe(t, 10.6, 11.6, backOut) * 0.06 + Math.sin(t * 1.5) * .004;
+    // post
+    ctx.fillStyle = "#cbd5e1";
+    rr(cx - 10, pivotY, 20, 420, 8); ctx.fill();
+    rr(cx - 120, pivotY + 410, 240, 26, 12); ctx.fill();
+    // beam
+    ctx.save(); ctx.translate(cx, pivotY); ctx.rotate(-ang);
+    rr(-330, -10, 660, 20, 10); ctx.fillStyle = "#e2e8f0"; ctx.fill();
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, pivotY, 20, 0, 7); ctx.fillStyle = C.gold; ctx.fill();
+    // pans
+    const ends = [-1, 1].map(sx => ({ x: cx + sx * 310 * Math.cos(ang), y: pivotY + sx * 310 * Math.sin(ang) }));
+    // note: rotate(-ang) → left end goes down when ang>0
+    ends[0].y = pivotY + 310 * Math.sin(ang); ends[1].y = pivotY - 310 * Math.sin(ang);
+    const panDefs = [
+      { e: ends[0], color: C.green, dark: "#166534", n: 52, shown: nG, label: "52 × +1R", lc: C.greenSoft },
+      { e: ends[1], color: C.red, dark: "#7f1d1d", n: 48, shown: nR, label: "48 × −1R", lc: C.redSoft },
+    ];
+    for (const d of panDefs) {
+      const px = d.e.x, py = d.e.y + 170;
+      ctx.strokeStyle = "rgba(226,232,240,.8)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(d.e.x, d.e.y); ctx.lineTo(px - 125, py); ctx.moveTo(d.e.x, d.e.y); ctx.lineTo(px + 125, py); ctx.stroke();
+      coinsPile(px, py - 8, d.n, d.color, d.dark, d.shown);
+      ctx.beginPath(); ctx.moveTo(px - 140, py); ctx.quadraticCurveTo(px, py + 70, px + 140, py); ctx.closePath();
+      ctx.fillStyle = "#94a3b8"; ctx.fill();
+      text(d.label, px, py + 100, F(900, 40), d.lc);
+      text(String(d.shown), px, py + 150, F(700, 30, "JBM"), C.muted);
+    }
+    // falling coins
+    for (let i = 0; i < 6; i++) {
+      const ph = (t * 2.2 + i / 6) % 1;
+      if (t > 8 && t < 10.5) {
+        const side = i % 2 ? 1 : -1;
+        const x = cx + side * 310, y = lerp(560, ends[i % 2].y + 120, ph);
+        withAlpha(1 - ph * .3, () => {
+          ctx.beginPath(); ctx.ellipse(x + Math.sin(i) * 40, y, 11, 6 + Math.abs(Math.sin(ph * 9)) * 5, 0, 0, 7);
+          ctx.fillStyle = side < 0 ? C.green : C.red; ctx.fill();
+        });
+      }
+    }
+  });
+  formulaBox("EV = 0,52×1R − 0,48×1R = +0,04R", t, 11.6, 15, 1385, C.gold, 40);
+  withAlpha(sceneAlpha(t, 12.6, 15), () => text("Pequeño, pero POSITIVO", W / 2, 1300, F(900, 40), C.greenSoft));
+}
+
+// ============================================================
+//  SCENE 3 : 10 cuentas
+// ============================================================
+function cardPos(i, layout) {
+  const col = i % 5, row = Math.floor(i / 5);
+  return { x: layout.x0 + col * (layout.w + layout.gap), y: layout.y0 + row * (layout.h + layout.gap) };
+}
+function accountCard(x, y, w, h, opts = {}) {
+  const { dim = 0, glow = 0, price = true } = opts;
+  ctx.save();
+  if (glow > 0) { ctx.shadowBlur = 40 * glow; ctx.shadowColor = "rgba(34,197,94,.9)"; }
+  rr(x, y, w, h, 18);
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
+  ctx.fillStyle = g; ctx.fill(); noShadow();
+  ctx.strokeStyle = glow > 0 ? `rgba(74,222,128,${.4 + .6 * glow})` : "rgba(255,255,255,.18)"; ctx.lineWidth = glow > 0 ? 4 : 2; ctx.stroke();
+  text("CUENTA", x + w / 2, y + h * .2, F(800, Math.round(w * .12)), C.muted);
+  text("50K", x + w / 2, y + h * .43, F(900, Math.round(w * .3)), C.white);
+  if (price) {
+    rr(x + w * .18, y + h * .66, w * .64, h * .2, h * .1); ctx.fillStyle = "rgba(34,197,94,.18)"; ctx.fill();
+    text("100 $", x + w / 2, y + h * .76, F(800, Math.round(w * .14)), C.greenSoft);
+  }
+  if (dim > 0) { rr(x, y, w, h, 18); ctx.fillStyle = `rgba(5,8,14,${.72 * dim})`; ctx.fill(); }
+  ctx.restore();
+}
+const L3 = { x0: 75, y0: 560, w: 170, h: 230, gap: 20 };
+function scene3(t) {
+  if (t < 14.7 || t > 20.4) return;
+  chip("02 · EL PLAN", t, 15, 20);
+  aiBubble("Con tus 1.000 $ compras 10 cuentas de 100 $. Cada una se opera a todo o nada.", t, 15, 20);
+  const al = sceneAlpha(t, 15, 20, .35, .35);
+  withAlpha(al, () => {
+    const fx = W / 2, fy = 1300;
+    const split = p(t, 16.0, 17.6);
+    const hand = figure(fx, fy, .7, t, { raise: .8 - split * .5 });
+    if (split < .02) cashBundle(fx, hand.handY - 50, 1, 0);
+    for (let i = 0; i < 10; i++) {
+      const cp = cardPos(i, L3);
+      const k = pe(t, 16.0 + i * .1, 16.7 + i * .1, easeInOut);
+      const landed = t > 16.7 + i * .1;
+      if (!landed) {
+        const sx = fx + (i - 4.5) * 8, sy = hand.handY - 50;
+        const x = lerp(sx, cp.x + L3.w / 2, k), y = lerp(sy, cp.y + L3.h / 2, k) - Math.sin(k * Math.PI) * 120;
+        ctx.save(); ctx.translate(x, y); ctx.rotate(k * 6 + i);
+        rr(-40, -22, 80, 44, 6); ctx.fillStyle = "#22a355"; ctx.fill(); ctx.strokeStyle = "#0d5c2b"; ctx.lineWidth = 2; ctx.stroke();
+        text("100", 0, 1, F(900, 22), "#dcfce7"); ctx.restore();
+      } else {
+        const pop = pe(t, 16.7 + i * .1, 17.1 + i * .1, backOut);
+        ctx.save(); ctx.translate(cp.x + L3.w / 2, cp.y + L3.h / 2); ctx.scale(pop, pop); ctx.translate(-(cp.x + L3.w / 2), -(cp.y + L3.h / 2));
+        accountCard(cp.x, cp.y, L3.w, L3.h); ctx.restore();
+      }
+    }
+  });
+  formulaBox("1.000 $ = 10 cuentas × 100 $", t, 17.6, 20, 1385, C.white, 44);
+}
+
+// ============================================================
+//  SCENE 4 : evaluación + coin flips
+// ============================================================
+const L4 = { x0: 75, y0: 905, w: 170, h: 190, gap: 42 };
+const PASS1 = [1, 0, 1, 1, 0, 0, 1, 0, 1, 0];   // ~52 %
+const PASS2 = [1, 0, 0, 1, 0, 0, 0, 0, 1, 0];   // survivors of both → 3/10 ≈ 27 %
+function coin(x, y, r, t0, t, win) {
+  // spinning coin that lands at t0+0.9
+  if (t < t0) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); return; }
+  const k = p(t, t0, t0 + .9);
+  const jump = Math.sin(k * Math.PI) * 60;
+  const landed = k >= 1;
+  const sx = landed ? 1 : Math.abs(Math.cos(k * Math.PI * 6));
+  const color = landed ? (win ? C.green : C.red) : C.gold;
+  ctx.save(); ctx.translate(x, y - jump); ctx.scale(Math.max(.08, sx), 1);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 3; ctx.stroke();
+  if (landed) {
+    ctx.strokeStyle = C.white; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.beginPath();
+    if (win) { ctx.moveTo(-r * .4, 0); ctx.lineTo(-r * .1, r * .3); ctx.lineTo(r * .45, -r * .35); }
+    else { ctx.moveTo(-r * .35, -r * .35); ctx.lineTo(r * .35, r * .35); ctx.moveTo(r * .35, -r * .35); ctx.lineTo(-r * .35, r * .35); }
+    ctx.stroke();
+  } else text("$", 0, 1, F(900, r), "#78350f");
+  ctx.restore();
+}
+function scene4(t) {
+  if (t < 19.7 || t > 32.4) return;
+  chip("03 · LA EVALUACIÓN", t, 20, 32);
+  aiBubble("Objetivo 3.000 $ con consistencia del 50 %: mínimo 2 días de 1.500 $. Dos trades ganados seguidos.", t, 20, 32);
+  const al = sceneAlpha(t, 20.2, 32, .4, .35);
+  withAlpha(al, () => {
+    // progress bar
+    const bx = 90, by = 610, bw = 900, bh = 70;
+    text("OBJETIVO", bx, by - 40, F(800, 28), C.muted, "left");
+    text("3.000 $", bx + bw, by - 40, F(900, 36), C.gold, "right");
+    rr(bx, by, bw, bh, 35); ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2; ctx.stroke();
+    const f1 = pe(t, 21.6, 22.6, easeInOut), f2 = pe(t, 23.4, 24.4, easeInOut);
+    const fill = (f1 * .5 + f2 * .5);
+    if (fill > 0) {
+      ctx.save(); rr(bx, by, bw, bh, 35); ctx.clip();
+      ctx.fillStyle = C.green; ctx.fillRect(bx, by, bw * .5 * f1, bh);
+      ctx.fillStyle = C.greenSoft; ctx.fillRect(bx + bw * .5, by, bw * .5 * f2, bh);
+      ctx.restore();
+      if (f1 > .5) text("Día 1 · +1.500 $", bx + bw * .25, by + bh / 2, F(800, 28), C.ink);
+      if (f2 > .5) text("Día 2 · +1.500 $", bx + bw * .75, by + bh / 2, F(800, 28), C.ink);
+    }
+    // 50% marker
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 4; ctx.setLineDash([10, 8]);
+    ctx.beginPath(); ctx.moveTo(bx + bw / 2, by - 14); ctx.lineTo(bx + bw / 2, by + bh + 14); ctx.stroke(); ctx.setLineDash([]);
+    // rule badge
+    const rb = pe(t, 20.8, 21.3, backOut);
+    ctx.save(); ctx.translate(W / 2, by + bh + 70); ctx.scale(rb, rb);
+    rr(-370, -36, 740, 72, 36); ctx.fillStyle = "rgba(250,204,21,.14)"; ctx.fill(); ctx.strokeStyle = "rgba(250,204,21,.6)"; ctx.lineWidth = 2; ctx.stroke();
+    text("Ningún día puede superar el 50 % del total", 0, 2, F(700, 30), C.gold);
+    ctx.restore();
+    if (t > 24.4) withAlpha(pe(t, 24.4, 24.8), () => text("✓ ¡EVALUACIÓN SUPERADA!", W / 2, 840, F(900, 34), C.greenSoft));
+
+    // cards with two coins each
+    const cardsIn = t > 25.2;
+    if (cardsIn) {
+      for (let i = 0; i < 10; i++) {
+        const cp = cardPos(i, L4);
+        const k = pe(t, 25.2 + i * .05, 25.6 + i * .05, backOut);
+        const c1 = 26.2 + i * .08, c2 = 28.3 + i * .08;
+        const dead1 = !PASS1[i] && t > c1 + 1.1;
+        const dead2 = PASS1[i] && !PASS2[i] && t > c2 + 1.1;
+        const dim = dead1 ? p(t, c1 + 1.1, c1 + 1.5) : dead2 ? p(t, c2 + 1.1, c2 + 1.5) : 0;
+        const glow = PASS2[i] ? pe(t, 29.9, 30.4) * (.75 + .25 * Math.sin(t * 6)) : 0;
+        ctx.save(); ctx.translate(cp.x + L4.w / 2, cp.y + L4.h / 2); ctx.scale(k, k); ctx.translate(-(cp.x + L4.w / 2), -(cp.y + L4.h / 2));
+        accountCard(cp.x, cp.y, L4.w, L4.h - 60, { price: false, glow });
+        // coin row
+        coin(cp.x + L4.w * .3, cp.y + L4.h - 25, 22, c1, t, PASS1[i]);
+        if (PASS1[i]) coin(cp.x + L4.w * .7, cp.y + L4.h - 25, 22, c2, t, PASS2[i]);
+        else if (t > c1 + 1) { ctx.beginPath(); ctx.arc(cp.x + L4.w * .7, cp.y + L4.h - 25, 22, 0, 7); ctx.strokeStyle = "rgba(255,255,255,.15)"; ctx.lineWidth = 3; ctx.stroke(); }
+        else coin(cp.x + L4.w * .7, cp.y + L4.h - 25, 22, 999, t, 0);
+        if (dim > 0) { rr(cp.x - 4, cp.y - 4, L4.w + 8, L4.h + 8, 18); ctx.fillStyle = `rgba(5,8,14,${.7 * dim})`; ctx.fill(); }
+        if (glow > 0) withAlpha(pe(t, 29.9, 30.3), () => {
+          rr(cp.x + 10, cp.y - 36, L4.w - 20, 34, 17); ctx.fillStyle = C.green; ctx.fill();
+          text("FONDEADA", cp.x + L4.w / 2, cp.y - 18, F(900, 20), C.ink);
+        });
+        ctx.restore();
+      }
+    }
+  });
+  formulaBox("0,52 × 0,52 = 27 % pass rate", t, 30.2, 32, 1405, C.gold, 44);
+}
+
+// ============================================================
+//  SCENE 5 : fondeada · calendario
+// ============================================================
+function scene5(t) {
+  if (t < 31.7 || t > 45.4) return;
+  chip("04 · LA FONDEADA", t, 32, 45);
+  aiBubble("Ya fondeado, retiras el 50 % del beneficio cada 5 días verdes. Y la cuenta sigue viva.", t, 32, 45);
+  const al = sceneAlpha(t, 32.3, 45, .4, .35);
+  withAlpha(al, () => {
+    // day 1 big
+    const d1 = pe(t, 33.6, 34.2, backOut);
+    const x = 90, y = 580, w = 900, h = 270;
+    ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(.6 + .4 * d1, .6 + .4 * d1); ctx.translate(-W / 2, -(y + h / 2));
+    ctx.globalAlpha *= p(t, 33.6, 33.9);
+    shadow(50, "rgba(34,197,94,.55)", 0);
+    rr(x, y, w, h, 30); ctx.fillStyle = "rgba(22,101,52,.9)"; ctx.fill(); noShadow();
+    ctx.strokeStyle = C.greenSoft; ctx.lineWidth = 3; ctx.stroke();
+    text("DÍA 1", x + 40, y + 50, F(900, 32), "#bbf7d0", "left");
+    text("Trade 1:1 · 52 %", x + w - 40, y + 50, F(700, 28), "#bbf7d0", "right");
+    const v1 = 2000 * pe(t, 34.0, 35.2);
+    text("+" + fmtThousands(v1) + " $", W / 2, y + 160, F(900, 120), C.white);
+    ctx.restore();
+    // days 2-5 small
+    for (let i = 0; i < 4; i++) {
+      const t0 = 37.2 + i * .65;
+      const k = pe(t, t0, t0 + .4, backOut);
+      const sw = 207, sx = 90 + i * (sw + 24), sy = 890, sh = 190;
+      rr(sx, sy, sw, sh, 22); ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.2)"; ctx.lineWidth = 2; ctx.stroke();
+      text("DÍA " + (i + 2), sx + sw / 2, sy + 36, F(800, 24), C.muted);
+      if (k > 0) {
+        ctx.save(); ctx.translate(sx + sw / 2, sy + sh / 2); ctx.scale(k, k); ctx.translate(-(sx + sw / 2), -(sy + sh / 2));
+        rr(sx, sy, sw, sh, 22); ctx.fillStyle = "rgba(22,101,52,.85)"; ctx.fill(); ctx.strokeStyle = C.greenSoft; ctx.stroke();
+        text("DÍA " + (i + 2), sx + sw / 2, sy + 36, F(800, 24), "#bbf7d0");
+        text("+200 $", sx + sw / 2, sy + 100, F(900, 46), C.white);
+        text("riesgo mín.", sx + sw / 2, sy + 152, F(600, 22), "#bbf7d0");
+        ctx.restore();
+      }
+    }
+    // total + withdraw button
+    const tot = p(t, 34.0, 35.2) * 2000 + clamp(Math.floor((t - 37.2) / .65) + 1, 0, 4) * 200;
+    withAlpha(pe(t, 40.0, 40.4), () => {
+      text("5 días verdes · Beneficio", 90, 1140, F(700, 30), C.muted, "left");
+      text(fmtThousands(tot) + " $", 990, 1140, F(900, 44), C.greenSoft, "right");
+    });
+    const bk = pe(t, 40.6, 41.1, backOut) * (1 - pe(t, 42.3, 42.5));
+    if (bk > 0) {
+      const click = t > 41.9 && t < 42.2 ? .93 : 1;
+      const pulse = 1 + Math.sin(t * 6) * .025 * (t < 41.9 ? 1 : 0);
+      ctx.save(); ctx.translate(W / 2, 1240); ctx.scale(bk * click * pulse, bk * click * pulse);
+      shadow(40, "rgba(250,204,21,.6)", 0);
+      rr(-300, -50, 600, 100, 50); ctx.fillStyle = C.gold; ctx.fill(); noShadow();
+      text("RETIRAR 50 %", 0, 3, F(900, 44), C.ink);
+      ctx.restore();
+      if (t > 42) {
+        const r = p(t, 42, 42.8);
+        withAlpha(1 - r, () => { ctx.beginPath(); ctx.arc(W / 2 + 120, 1250, 30 + r * 300, 0, 7); ctx.strokeStyle = C.gold; ctx.lineWidth = 6; ctx.stroke(); });
+      }
+    }
+    // tap hand cursor
+    if (t > 41.2 && t < 42.6) {
+      const k = pe(t, 41.2, 41.9, easeInOut);
+      const hx = lerp(900, W / 2 + 120, k), hy = lerp(1500, 1260, k);
+      ctx.beginPath(); ctx.arc(hx, hy, 26, 0, 7); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(hx, hy, 34, 0, 7); ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.lineWidth = 4; ctx.stroke();
+    }
+    // payout result
+    if (t > 42.4) {
+      const k = pe(t, 42.4, 42.9, backOut);
+      ctx.save(); ctx.translate(W / 2, 1245); ctx.scale(k, k);
+      shadow(60, "rgba(34,197,94,.8)", 0);
+      rr(-320, -80, 640, 160, 34); ctx.fillStyle = C.green; ctx.fill(); noShadow();
+      text("PAYOUT ≈ 1.260 $", 0, -14, F(900, 54), C.ink);
+      text("50 % de 2.800 $ · tras el split", 0, 44, F(700, 26), "rgba(11,15,23,.75)");
+      ctx.restore();
+    }
+    withAlpha(pe(t, 43.3, 43.7), () => {
+      const pul = .6 + .4 * Math.sin(t * 5);
+      ctx.beginPath(); ctx.arc(W / 2 - 200, 1358, 10, 0, 7); ctx.fillStyle = `rgba(74,222,128,${pul})`; ctx.fill();
+      text("La cuenta sigue viva", W / 2 + 15, 1360, F(800, 32), C.greenSoft);
+    });
+  });
+  formulaBox("5 días → 2.800 $ → 50 % → ≈ 1.260 $", t, 43.8, 45, 1430, C.gold, 38);
+}
+
+// ============================================================
+//  SCENE 6 : números finales (embudo + contadores)
+// ============================================================
+function scene6(t) {
+  if (t < 44.7 || t > 55.4) return;
+  chip("05 · LOS NÚMEROS", t, 45, 55);
+  aiBubble("27 % × 52 %: cada cuenta tiene un 14 % de llegar a payout.", t, 45, 55);
+  const al = sceneAlpha(t, 45.3, 55, .4, .35);
+  withAlpha(al, () => {
+    const rows = [
+      { w: 900, label: "cuentas", c: "#334155", t0: 45.6, n: 10, dec: 0 },
+      { w: 640, label: "fondeadas", c: "#15803d", t0: 46.4, n: 2.7, dec: 1, mult: "× 27 %" },
+      { w: 420, label: "payouts", c: C.gold, t0: 47.2, n: 1.4, dec: 1, mult: "× 52 %", ink: true },
+    ];
+    rows.forEach((r, i) => {
+      const k = pe(t, r.t0, r.t0 + .6, backOut);
+      if (k <= 0) return;
+      const y = 560 + i * 150, h = 110;
+      const next = rows[i + 1] ? rows[i + 1].w : r.w * .7;
+      ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(k, 1); ctx.globalAlpha *= clamp(k);
+      ctx.beginPath(); ctx.moveTo(-r.w / 2, -h / 2); ctx.lineTo(r.w / 2, -h / 2); ctx.lineTo(next / 2, h / 2); ctx.lineTo(-next / 2, h / 2); ctx.closePath();
+      ctx.fillStyle = r.c; ctx.fill();
+      const v = r.n * pe(t, r.t0, r.t0 + .8);
+      text(v.toFixed(r.dec).replace(".", ",") + " " + r.label, 0, 3, F(900, 46), r.ink ? C.ink : C.white);
+      ctx.restore();
+      if (r.mult) withAlpha(k, () => text(r.mult, W / 2 + 420, y - 20, F(800, 30, "JBM"), C.gold, "right"));
+    });
+    // counters
+    const stats = [
+      { t0: 48.6, big: v => Math.round(14 * v) + " %", small: "payout por cuenta", c: C.white },
+      { t0: 50.2, big: v => Math.round(78 * v) + " %", small: "de cobrar mínimo 1 vez", c: C.greenSoft },
+      { t0: 51.8, big: v => "EV ≈ +" + Math.round(770 * v) + " $", small: "valor esperado del plan", c: C.gold },
+    ];
+    stats.forEach((s, i) => {
+      const k = pe(t, s.t0, s.t0 + .5, backOut);
+      if (k <= 0) return;
+      const y = 1035 + i * 125;
+      ctx.save(); ctx.translate(0, (1 - k) * 40); ctx.globalAlpha *= clamp(k);
+      rr(90, y - 52, 900, 108, 26); ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = 2; ctx.stroke();
+      text(s.big(pe(t, s.t0, s.t0 + 1.0)), 130, y + 3, F(900, 64), s.c, "left");
+      text(s.small, 960, y + 3, F(700, 28), C.muted, "right");
+      ctx.restore();
+    });
+  });
+  withAlpha(sceneAlpha(t, 53.0, 55), () => text("+ un payout cada 5 días verdes", W / 2, 1420, F(800, 34), C.greenSoft));
+}
+
+// ============================================================
+//  SCENE 6b : prueba real (payout)
+// ============================================================
+function scene6b(t) {
+  if (t < 54.7 || t > 60.4) return;
+  chip("¿Y FUNCIONA?", t, 55, 60);
+  const al = sceneAlpha(t, 55, 60, .4, .4);
+  withAlpha(al, () => {
+    const k1 = pe(t, 55.2, 55.7, backOut);
+    ctx.save(); ctx.translate(W / 2, 420); ctx.scale(k1, k1);
+    text("No es teoría.", 0, 0, F(900, 76), C.white);
+    text("Mis payouts:", 0, 92, F(900, 76), C.gold);
+    ctx.restore();
+    // mail card
+    const k = pe(t, 55.8, 56.4, backOut);
+    const sx0 = 88, sw0 = 520, ih = imgPayout.naturalHeight;   // crop: "Lucid Trading 3 · Payout Requested - Your payo…"
+    const cw = 980, s = (cw - 40) / sw0, chh = ih * s + 40;
+    const cy = 760;
+    ctx.save(); ctx.translate(W / 2, cy + chh / 2); ctx.scale(.7 + .3 * k, .7 + .3 * k); ctx.globalAlpha *= clamp(k * 1.5); ctx.rotate((1 - k) * -.05);
+    ctx.translate(-W / 2, -(cy + chh / 2));
+    shadow(60, "rgba(0,0,0,.7)", 20);
+    rr(50, cy - 70, cw, chh + 70, 22); ctx.fillStyle = "#ffffff"; ctx.fill(); noShadow();
+    ctx.fillStyle = "#f1f5f9"; rr(50, cy - 70, cw, 62, 22); ctx.fill(); ctx.fillRect(50, cy - 30, cw, 22);
+    text("Recibidos", 90, cy - 38, F(800, 26), "#334155", "left");
+    ctx.drawImage(imgPayout, sx0, 0, sw0, ih, 70, cy + 20, sw0 * s, ih * s);
+    // highlight "Payout Requested"
+    const hk = pe(t, 56.6, 57.2, easeInOut);
+    if (hk > 0) {
+      const hx = 70 + (348 - sx0) * s, hy = cy + 20 + 14 * s, hw = 128 * s * hk, hh = 36 * s;
+      ctx.fillStyle = "rgba(250,204,21,.35)"; rr(hx - 6, hy, hw + 12, hh, 8); ctx.fill();
+    }
+    ctx.restore();
+    // stamp
+    const sk = pe(t, 57.3, 57.7, backOut);
+    if (sk > 0) {
+      ctx.save(); ctx.translate(W / 2, 1080); ctx.rotate(-.08); ctx.scale(1.6 - .6 * sk, 1.6 - .6 * sk); ctx.globalAlpha *= clamp(sk * 2);
+      rr(-330, -70, 660, 140, 20); ctx.strokeStyle = C.green; ctx.lineWidth = 8; ctx.stroke();
+      ctx.fillStyle = "rgba(34,197,94,.12)"; ctx.fill();
+      text("PAYOUT SOLICITADO ✓", 0, 4, F(900, 52), C.greenSoft);
+      ctx.restore();
+    }
+    withAlpha(pe(t, 58.0, 58.5), () => text("Lucid Trading · 1 oct", W / 2, 1230, F(700, 34), C.muted));
+  });
+}
+
+// ============================================================
+//  SCENE 7 : cierre
+// ============================================================
+function scene7(t) {
+  if (t < 59.6) return;
+  // screen-off effect: a small chat window collapses into a line → dot
+  const off = p(t, 60.2, 60.9);
+  if (t < 61) {
+    const al = p(t, 59.6, 60.0);
+    withAlpha(al, () => {
+      const sy = 1 - pe(off, 0, .6, easeIn) * .995, sx = 1 - pe(off, .5, 1, easeIn) * .99;
+      ctx.save(); ctx.translate(W / 2, 760); ctx.scale(sx, sy);
+      rr(-420, -260, 840, 520, 30); ctx.fillStyle = off > 0 ? "#e2e8f0" : C.panel; ctx.fill();
+      if (off === 0) { claudeIcon(0, -40, 60, t); text("Claude", 0, 80, F(800, 50), C.white); }
+      ctx.restore();
+    });
+  }
+  // fade background to black
+  ctx.fillStyle = `rgba(0,0,0,${pe(t, 60.2, 61.0)})`; ctx.fillRect(0, 0, W, H);
+  // final lines
+  withAlpha(Math.min(pe(t, 61.0, 61.5), 1 - p(t, 63.4, 63.8)), () => {
+    text("No necesitas un", W / 2, 760, F(800, 60), C.white);
+    text("80 % de winrate.", W / 2, 840, F(900, 72), C.redSoft);
+    withAlpha(pe(t, 62.2, 62.7), () => {
+      text("Necesitas entender", W / 2, 990, F(800, 60), C.white);
+      text("las matemáticas.", W / 2, 1070, F(900, 72), C.greenSoft);
+    });
+  });
+  withAlpha(Math.min(pe(t, 63.8, 64.3), 1 - p(t, 65.4, 66)), () => {
+    const k = pe(t, 63.8, 64.4, backOut);
+    ctx.save(); ctx.translate(W / 2, 880); ctx.scale(k, k);
+    text("No es suerte.", 0, 0, F(900, 92), C.white);
+    text("Es EV.", 0, 120, F(900, 132), C.gold);
+    ctx.restore();
+    withAlpha(pe(t, 64.5, 64.9), () => text(CONFIG.handle, W / 2, 1150, F(800, 44), C.muted));
+  });
+}
+
+// ============================================================
+//  CAPTIONS (voz en off)
+// ============================================================
+const VO = [
+  // [start, end, text, speaker]
+  [5.2, 15.0, "Sí. Primero tienes que entender el EV, el valor esperado: lo que ganas de media cada vez que repites algo. Con un 52 % de acierto a ratio 1:1, ganas 52 veces y pierdes 48. Cada trade te deja de media un +4 % de lo que arriesgas. Pequeño, pero positivo."],
+  [15.2, 20.0, "Con tus 1.000 dólares compras 10 cuentas de 100. Cada una se opera a todo o nada."],
+  [20.2, 32.0, "La evaluación pide 3.000 de objetivo, con una regla de consistencia del 50 %. Así que necesitas mínimo 2 días de 1.500. Dos trades ganados seguidos: 52 % por 52 %. Pasas un 27 % de las veces. De 10 cuentas, unas 3 llegan a fondeada."],
+  [32.2, 45.0, "Ya fondeado, puedes retirar el 50 % del beneficio cada 5 días verdes. Día 1: un trade 1:1 de 2.000, otra vez con un 52 %. Con ese colchón, los otros 4 días haces 200 con riesgo mínimo. Son 2.800 de beneficio y retiras la mitad: unos 1.260 después del split. Y la cuenta sigue viva."],
+  [45.2, 55.0, "27 % por 52 %: cada cuenta tiene un 14 % de llegar a payout. Con 10 cuentas, un 78 % de probabilidad de cobrar al menos una vez. Y el valor esperado del plan es de unos +770 dólares. Más un payout cada 5 días verdes mientras la cuenta siga viva."],
+  [55.2, 59.8, "Y no es teoría. Aquí están mis payouts."],
+];
+// split each line into ~5-7 word chunks, timed by character count
+const CAPS = [];
+for (const [a, b, s] of VO) {
+  const words = s.split(" "); const chunks = []; let cur = [];
+  for (const w of words) { cur.push(w); if (cur.length >= 6 || /[.:,]$/.test(w) && cur.length >= 3) { chunks.push(cur.join(" ")); cur = []; } }
+  if (cur.length) chunks.push(cur.join(" "));
+  const tot = chunks.reduce((n, c) => n + c.length + 6, 0); let acc = a;
+  for (const c of chunks) { const d = (b - a) * (c.length + 6) / tot; CAPS.push([acc, acc + d, c]); acc += d; }
+}
+const HL = /(\d[\d.,]*\s?%?|EV|\+?\d[\d.]*\s?\$|payout|positivo|fondeada|todo o nada)/i;
+function captions(t) {
+  if (!CONFIG.captions) return;
+  const c = CAPS.find(c => t >= c[0] && t < c[1]);
+  if (!c) return;
+  const k = pe(t, c[0], c[0] + .12, backOut);
+  const font = F(900, 46);
+  const lines = wrap(c[2], 900, font);
+  ctx.save(); ctx.translate(W / 2, 1530); ctx.scale(.9 + .1 * k, .9 + .1 * k);
+  lines.forEach((ln, i) => {
+    const y = (i - (lines.length - 1) / 2) * 58;
+    ctx.font = font; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const words = ln.split(" "); const total = ctx.measureText(ln).width; let x = -total / 2;
+    for (const w of words) {
+      const ww = ctx.measureText(w + " ").width;
+      ctx.lineWidth = 10; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.lineJoin = "round"; ctx.strokeText(w, x, y);
+      ctx.fillStyle = HL.test(w) ? C.gold : C.white; ctx.fillText(w, x, y);
+      x += ww;
+    }
+  });
+  ctx.restore();
+}
+
+// ============================================================
+//  MAIN
+// ============================================================
+function renderFrame(t) {
+  ctx = document.getElementById("c").getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; noShadow();
+  ctx.clearRect(0, 0, W, H);
+  drawBackground(t);
+  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t); scene6(t); scene6b(t); scene7(t);
+  if (t < 59.8) captions(t);
+  // global fade in/out
+  const fade = Math.max(1 - p(t, 0, .3), p(t, DURATION - .5, DURATION));
+  if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderFrame = renderFrame;
+window.DURATION = DURATION;
+window.ready = Promise.all([
+  document.fonts.load(F(900, 40)), document.fonts.load(F(700, 40, "JBM")),
+  imgBg.decode(), imgPayout.decode(),
+]).then(() => document.fonts.ready);
+
+// live preview when opened in a browser (no ?render)
+if (!params.has("render")) {
+  window.ready.then(() => {
+    const start = performance.now() - (parseFloat(params.get("t")) || 0) * 1000;
+    const loop = () => { renderFrame(((performance.now() - start) / 1000) % DURATION); requestAnimationFrame(loop); };
+    loop();
+  });
+  document.body.style.cssText = "display:flex;justify-content:center;background:#111";
+  document.getElementById("c").style.cssText = "height:100vh;width:auto";
+}
+</script>
+</body>
+</html>
