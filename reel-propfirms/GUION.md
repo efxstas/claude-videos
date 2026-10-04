@@ -1,12 +1,12 @@
 # Reel · "1.000 $ y 52 % de WR: ¿se puede ser rentable?"
 
-Vídeo educativo. 1080×1920 (9:16), 30 fps, **86 s**. Archivo: `out/reel.mp4` (con subtítulos).
+Vídeo educativo. 1080×1920 (9:16), 30 fps, **86 s**. Archivo: `out/reel.mp4` (sin subtítulos).
 El audio solo lleva efectos suaves, sin música (la pones tú en el editor) y sin voz.
 
 ## Narración (para leer tú)
 
 Tono: profesor/explicador, en segunda persona ("tú", "si alguien…"). Nunca "yo hago esto".
-Los subtítulos del vídeo siguen exactamente este texto y estos tiempos. Ritmo ≈ 3 palabras/segundo.
+Las animaciones están sincronizadas con estos tiempos. Ritmo ≈ 3 palabras/segundo.
 Truco: graba cada bloque por separado y colócalo al inicio de su escena en el editor.
 
 | Tiempo | En pantalla | Lo que dices |
@@ -42,8 +42,8 @@ Truco: graba cada bloque por separado y colócalo al inicio de su escena en el e
 
 ```bash
 node sfx.mjs                     # regenera assets/sfx.wav (solo efectos)
-node render.mjs                  # out/reel.mp4
-node render.mjs --no-captions    # out/reel_sin_subtitulos.mp4
+node render.mjs                  # out/reel.mp4 (sin subtítulos)
+node render.mjs --captions       # out/reel_con_subtitulos.mp4
 ```
 
 Vista previa en vivo: abre `reel.html` en el navegador (`reel.html?t=63` empieza en el segundo 63).

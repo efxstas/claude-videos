@@ -1,6 +1,6 @@
 // Renders reel.html frame by frame with Playwright and encodes it with ffmpeg.
-//   node render.mjs                         -> out/reel.mp4 (con subtítulos)
-//   node render.mjs --no-captions           -> out/reel_sin_subtitulos.mp4
+//   node render.mjs                         -> out/reel.mp4 (sin subtítulos)
+//   node render.mjs --captions              -> out/reel_con_subtitulos.mp4
 //   node render.mjs --handle=@mi_cuenta     -> cambia el @ del cierre
 //   node render.mjs --stills=1,9,22         -> solo PNGs de esos segundos (preview)
 import { createRequire } from "node:module";
@@ -17,7 +17,7 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map(a => { const [k, v] = a.replace(/^--/, "").split("="); return [k, v ?? true]; }));
 const FPS = Number(args.fps || 30);
 const WORKERS = Number(args.workers || 4);
-const captions = !args["no-captions"];
+const captions = !!args.captions;
 const outDir = path.join(dir, "out");
 mkdirSync(outDir, { recursive: true });
 
@@ -72,7 +72,7 @@ await browser.close();
 const { writeFileSync } = await import("node:fs");
 const list = path.join(outDir, "segs.txt");
 writeFileSync(list, segs.map(s => `file '${s}'`).join("\n"));
-const name = args.out || (captions ? "reel.mp4" : "reel_sin_subtitulos.mp4");
+const name = args.out || (captions ? "reel_con_subtitulos.mp4" : "reel.mp4");
 const audio = path.join(dir, "assets", "sfx.wav");
 const ffArgs = ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list];
 if (existsSync(audio)) ffArgs.push("-i", audio, "-c:a", "aac", "-b:a", "192k", "-shortest");
