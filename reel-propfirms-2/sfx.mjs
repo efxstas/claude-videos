@@ -1,6 +1,6 @@
 // Soft sound effects for part 2 (no music). Writes assets/sfx.wav
 import { writeFileSync } from "node:fs";
-const SR = 44100, DUR = 88, N = SR * DUR;
+const SR = 44100, DUR = 92, N = SR * DUR;
 const L = new Float32Array(N), R = new Float32Array(N);
 let seed = 1; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647 * 2 - 1;
 function add(t0, len, fn, gain = 1) {
@@ -17,19 +17,23 @@ const riser = (t, len) => add(t, len, (s, k) => Math.sin(2 * Math.PI * (220 + 44
 const boom = t => add(t, 1.6, (s, k) => Math.sin(2 * Math.PI * (55 - 15 * k) * s) * Math.exp(-k * 3) * env(s, .005), .3);
 const shot = t => { add(t, .35, (s, k) => rand() * Math.exp(-k * 12), .12); thud(t); };
 
-[8, 22, 34, 46, 58, 70, 81].forEach(whoosh);
-for (let i = 0; i < 6; i++) pop(.6 + i * .18, 700 + i * 60);
-for (let i = 0; i < 24; i += 2) tick(3.6 + i * .07);
-thud(5.8);
-riser(9, 1.6); [12, 15.2, 18, 18.6].forEach(t => pop(t, 600)); ding(16.2, 1568);
-for (let r = 0; r < 3; r++) for (let i = 0; i < 50; i += 4) tick(23.6 + r * .25 + i * .07);
-[29, 29.4, 29.8].forEach(thud);
-pop(35.6, 400); pop(38.6, 400); for (let i = 0; i < 4; i++) tick(39 + i * .35);
-shot(42); thud(42.3);
-[46.8, 49.6].forEach(t => ding(t + .2, 1318)); thud(51.4); riser(52.9, 1.1); ding(54, 1568);
-[59.4, 60.8, 62.6, 64].forEach(t => pop(t, 500)); riser(65.4, 1.2); ding(66.6, 1760);
-[72.2, 73.8].forEach(thud); ding(75.6, 1760);
-boom(81.4); pop(83.5, 400);
+// timings mirror reel.html (part 2 · gurú vs trader)
+[6, 14, 18, 36, 45, 56, 68, 74, 83].forEach(whoosh);
+for (let i = 0; i < 6; i++) pop(.5 + i * .3, 700 + i * 60);
+shot(2.6);
+pop(6.4, 400); for (let i = 0; i < 24; i += 2) tick(7.6 + i * .06);
+pop(15.3, 500);
+for (let i = 0; i < 10; i++) { const tr = 21 + i * .22; i === 6 ? ding(tr, 1568) : thud(tr); }
+shot(25.6); [28.4, 29.1, 29.8].forEach(t => pop(t, 500)); thud(30.5);
+pop(37, 400); ding(38, 1318); [40.6, 41.6].forEach(t => pop(t, 600));
+for (let i = 0; i < 4; i++) tick(45.5 + i * .2);
+[47, 48.8].forEach(t => ding(t + .2, 1318)); thud(50.4); riser(52.1, 1.1); ding(53.2, 1568);
+const TR = ["pay", "alive", "burn", "pay", "burn", "alive", "burn", "pay", "alive", "burn"];
+TR.forEach((r, i) => { const tr = 57.6 + i * .22; r === "pay" ? ding(tr, 1568) : r === "burn" ? thud(tr) : pop(tr, 500); });
+[61, 61.7, 62.4].forEach(t => pop(t, 500)); ding(63.1, 1760);
+shot(68.4); shot(69.4);
+[74.6, 75.2, 75.8, 76.4].forEach(t => tick(t)); riser(77.4, 1.2); ding(78.6, 1760);
+boom(83.4); pop(84.4, 400); thud(86.6);
 
 let peak = 0; for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
 const g = peak > .7 ? .7 / peak : 1;
