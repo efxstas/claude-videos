@@ -18,11 +18,11 @@
 // ============================================================
 const params = new URLSearchParams(location.search);
 const CONFIG = {
-  handle: params.get("handle") || "@tu_handle",
+  handle: params.get("handle") || "@alt_stas",
   captions: params.get("captions") !== "0",
 };
 const W = 1080, H = 1920;
-const DURATION = 66;
+const DURATION = 86;
 
 const C = {
   green: "#22c55e", greenSoft: "#4ade80", red: "#ef4444", redSoft: "#f87171",
@@ -202,8 +202,8 @@ function figure(x, y, s, t, opts = {}) {
 // ============================================================
 //  SCENE 1 + 2 : chat with the AI
 // ============================================================
-const Q = "Tengo 1.000 $ y un 52 % de winrate. ¿Puedo ser rentable con prop firms?";
-const A1 = "Sí. Primero tienes que entender el EV: el valor esperado. Lo que ganas de media cada vez que repites algo.";
+const Q = "Con 1.000 $ y un 52 % de winrate, ¿se puede ser rentable con prop firms?";
+const A1 = "Sí, si entiendes el EV: el valor esperado. Lo que ganas de media cada vez que repites algo.";
 
 function chatPanel(t) {
   // visible 0 → ~7.6, then collapses
@@ -284,20 +284,20 @@ function chatPanel(t) {
 
 function scene1(t) {
   if (t > 7.8) return;
-  chip("1.000 $ · 52 % WR · PROP FIRMS", t, 0, 15);
+  chip("VÍDEO EDUCATIVO · PROP FIRMS", t, 0, 15);
   chatPanel(t);
   // character with cash in front of the screen (visible in scene 1 only)
   const al = Math.min(p(t, .2, .8), 1 - p(t, 4.6, 5.2));
   withAlpha(al, () => {
     const k = pe(t, .2, .9, backOut);
-    const fx = 300, fy = 1640 + (1 - k) * 200;
-    const hand = figure(fx, fy, .95, t, { look: 1, raise: .55 });
-    cashBundle(fx + 150, hand.handY - 40, 1, -.15 + Math.sin(t * 2) * .04);
+    const fx = 270, fy = 1440 + (1 - k) * 200;
+    const hand = figure(fx, fy, .72, t, { look: 1, raise: .55 });
+    cashBundle(fx + 120, hand.handY - 30, .8, -.15 + Math.sin(t * 2) * .04);
     // thought bubble
     withAlpha(pe(t, 1.0, 1.4), () => {
-      rr(560, 1250, 420, 110, 55); ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.fill();
-      ctx.beginPath(); ctx.arc(520, 1380, 16, 0, 7); ctx.arc(480, 1415, 9, 0, 7); ctx.fill();
-      text("¿52 % basta?", 770, 1305, F(900, 44), C.ink);
+      rr(560, 1110, 420, 110, 55); ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(520, 1240, 16, 0, 7); ctx.arc(480, 1275, 9, 0, 7); ctx.fill();
+      text("¿52 % basta?", 770, 1165, F(900, 44), C.ink);
     });
   });
 }
@@ -518,13 +518,106 @@ function scene4(t) {
   formulaBox("0,52 × 0,52 = 27 % pass rate", t, 30.2, 32, 1405, C.gold, 44);
 }
 
+
+// ============================================================
+//  SCENE 4b : el día grande de la fondeada (también 52 %)
+// ============================================================
+const BIG = [1, 0, 1];
+function sceneBig(t) {
+  if (t < 31.7 || t > 40.4) return;
+  chip("04 · EL DÍA GRANDE", t, 32, 40);
+  aiBubble("Ojo: el día grande en la fondeada también es un 52 %. Si sale mal, la cuenta se quema.", t, 32, 40);
+  const al = sceneAlpha(t, 32.3, 40, .4, .35);
+  withAlpha(al, () => {
+    withAlpha(pe(t, 32.6, 33.0), () => text("Día 1 de fondeo · trade 1:1 de 2.000 $", W / 2, 560, F(700, 32), C.muted));
+    const cw = 260, chh = 300, gap = 40, x0 = (W - (3 * cw + 2 * gap)) / 2, y = 620;
+    for (let i = 0; i < 3; i++) {
+      const x = x0 + i * (cw + gap);
+      const k = pe(t, 32.7 + i * .12, 33.2 + i * .12, backOut);
+      const t0 = 34.0 + i * .4, land = t0 + .9;
+      const won = BIG[i], done = t > land;
+      const shake = !won && t > land && t < land + .4 ? Math.sin(t * 80) * 10 * (1 - p(t, land, land + .4)) : 0;
+      const glow = won && done ? pe(t, land, land + .3) * (.75 + .25 * Math.sin(t * 6)) : 0;
+      ctx.save(); ctx.translate(x + cw / 2 + shake, y + chh / 2); ctx.scale(k, k); ctx.translate(-(x + cw / 2), -(y + chh / 2));
+      accountCard(x, y, cw, chh, { price: false, glow });
+      rr(x + 40, y - 20, cw - 80, 40, 20); ctx.fillStyle = C.green; ctx.fill();
+      text("FONDEADA", x + cw / 2, y + 1, F(900, 22), C.ink);
+      if (done && won) withAlpha(pe(t, land, land + .3), () => text("+2.000 $", x + cw / 2, y + chh * .78, F(900, 44), C.greenSoft));
+      if (done && !won) {
+        const d = p(t, land, land + .4);
+        rr(x, y, cw, chh, 18); ctx.fillStyle = `rgba(60,8,8,${.75 * d})`; ctx.fill();
+        withAlpha(d, () => {
+          ctx.save(); ctx.translate(x + cw / 2, y + chh * .55); ctx.rotate(-.2);
+          rr(-115, -34, 230, 68, 12); ctx.strokeStyle = C.red; ctx.lineWidth = 6; ctx.stroke();
+          text("QUEMADA", 0, 2, F(900, 40), C.redSoft); ctx.restore();
+        });
+      }
+      ctx.restore();
+      if (k > .5) coin(x + cw / 2, y + chh + 75, 40, t0, t, won);
+    }
+    withAlpha(pe(t, 36.4, 36.8), () => text("Si el día grande falla → la cuenta se quema", W / 2, 1110, F(800, 36), C.redSoft));
+    withAlpha(pe(t, 37.0, 37.4), () => text("De ~3 fondeadas, solo 1 o 2 llegan a cobrar", W / 2, 1180, F(800, 36), C.greenSoft));
+  });
+  formulaBox("2,7 × 0,52 ≈ 1,4 llegan a payout", t, 37.6, 40, 1405, C.gold, 42);
+}
+
+// ============================================================
+//  SCENE 6c : ¿y si el winrate fuese mayor?
+// ============================================================
+const WR_STEPS = [[63.6, .52], [66.2, .53], [68.8, .55], [71.4, .60]];
+const PAYOUT = 1260, COST = 1000, ACCOUNTS = 10;
+const evOf = wr => ACCOUNTS * wr ** 3 * PAYOUT - COST;
+const pct = (x, d = 1) => (x * 100).toFixed(d).replace(".", ",") + " %";
+function sceneWR(t) {
+  if (t < 62.7 || t > 75.4) return;
+  chip("07 · ¿Y SI SUBES EL WINRATE?", t, 63, 75);
+  aiBubble("Imagina que tu winrate fuese solo un poco mayor…", t, 63, 75);
+  const al = sceneAlpha(t, 63.3, 75, .4, .35);
+  withAlpha(al, () => {
+    let wr = WR_STEPS[0][1];
+    for (let i = 1; i < WR_STEPS.length; i++) wr = lerp(wr, WR_STEPS[i][1], pe(t, WR_STEPS[i][0], WR_STEPS[i][0] + .7, easeInOut));
+    // big WR + slider
+    text("WINRATE", W / 2, 470, F(800, 30), C.muted);
+    text(Math.round(wr * 100) + " %", W / 2, 560, F(900, 120), C.gold);
+    const sx0 = 140, sx1 = 940, sy = 660, toX = v => lerp(sx0, sx1, (v - .50) / .12);
+    rr(sx0, sy - 6, sx1 - sx0, 12, 6); ctx.fillStyle = "rgba(255,255,255,.15)"; ctx.fill();
+    rr(sx0, sy - 6, toX(wr) - sx0, 12, 6); ctx.fillStyle = C.gold; ctx.fill();
+    for (const [, v] of WR_STEPS) { text(Math.round(v * 100) + "%", toX(v), sy + 40, F(700, 24, "JBM"), C.muted); }
+    ctx.beginPath(); ctx.arc(toX(wr), sy, 22, 0, 7); ctx.fillStyle = C.white; ctx.fill();
+    // metrics
+    const rows = [
+      ["Pasas la evaluación", pct(wr ** 2), C.white],
+      ["Payout por cuenta", pct(wr ** 3), C.white],
+      ["Cobrar ≥ 1 vez (10 cuentas)", pct(1 - (1 - wr ** 3) ** ACCOUNTS, 0), C.greenSoft],
+    ];
+    rows.forEach(([lab, val, col], i) => {
+      const y = 780 + i * 112;
+      withAlpha(pe(t, 63.8 + i * .2, 64.2 + i * .2), () => {
+        rr(90, y - 46, 900, 92, 22); ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = 2; ctx.stroke();
+        text(lab, 125, y + 2, F(700, 30), C.muted, "left");
+        text(val, 955, y + 2, F(900, 46), col, "right");
+      });
+    });
+    withAlpha(pe(t, 64.4, 64.8), () => {
+      const y = 1140, ev = evOf(wr), base = evOf(.52);
+      shadow(40, "rgba(250,204,21,.35)", 0);
+      rr(90, y - 66, 900, 132, 26); ctx.fillStyle = "rgba(250,204,21,.14)"; ctx.fill(); noShadow();
+      ctx.strokeStyle = "rgba(250,204,21,.7)"; ctx.lineWidth = 3; ctx.stroke();
+      text("EV del plan", 125, y + 2, F(800, 32), C.gold, "left");
+      text("+" + fmtThousands(ev) + " $", 955, y - 8, F(900, 60), C.gold, "right");
+      if (wr > .521) text("+" + Math.round((ev / base - 1) * 100) + " % vs 52 %", 955, y + 42, F(700, 24), C.greenSoft, "right");
+    });
+  });
+  formulaBox("+1 % de WR ≈ +100 $ de EV", t, 73.2, 75, 1405, C.gold, 44);
+}
+
 // ============================================================
 //  SCENE 5 : fondeada · calendario
 // ============================================================
 function scene5(t) {
   if (t < 31.7 || t > 45.4) return;
-  chip("04 · LA FONDEADA", t, 32, 45);
-  aiBubble("Ya fondeado, retiras el 50 % del beneficio cada 5 días verdes. Y la cuenta sigue viva.", t, 32, 45);
+  chip("05 · EL PAYOUT", t, 32, 45);
+  aiBubble("Las que sobreviven: retiras el 50 % del beneficio cada 5 días verdes. Y la cuenta sigue viva.", t, 32, 45);
   const al = sceneAlpha(t, 32.3, 45, .4, .35);
   withAlpha(al, () => {
     // day 1 big
@@ -608,7 +701,7 @@ function scene5(t) {
 // ============================================================
 function scene6(t) {
   if (t < 44.7 || t > 55.4) return;
-  chip("05 · LOS NÚMEROS", t, 45, 55);
+  chip("06 · LOS NÚMEROS", t, 45, 55);
   aiBubble("27 % × 52 %: cada cuenta tiene un 14 % de llegar a payout.", t, 45, 55);
   const al = sceneAlpha(t, 45.3, 55, .4, .35);
   withAlpha(al, () => {
@@ -655,13 +748,13 @@ function scene6(t) {
 // ============================================================
 function scene6b(t) {
   if (t < 54.7 || t > 60.4) return;
-  chip("¿Y FUNCIONA?", t, 55, 60);
+  chip("RESULTADOS REALES", t, 55, 60);
   const al = sceneAlpha(t, 55, 60, .4, .4);
   withAlpha(al, () => {
     const k1 = pe(t, 55.2, 55.7, backOut);
     ctx.save(); ctx.translate(W / 2, 420); ctx.scale(k1, k1);
-    text("No es teoría.", 0, 0, F(900, 76), C.white);
-    text("Mis payouts:", 0, 92, F(900, 76), C.gold);
+    text("Más winrate,", 0, 0, F(900, 76), C.white);
+    text("más payouts.", 0, 92, F(900, 76), C.gold);
     ctx.restore();
     // mail card
     const k = pe(t, 55.8, 56.4, backOut);
@@ -729,7 +822,10 @@ function scene7(t) {
     text("No es suerte.", 0, 0, F(900, 92), C.white);
     text("Es EV.", 0, 120, F(900, 132), C.gold);
     ctx.restore();
-    withAlpha(pe(t, 64.5, 64.9), () => text(CONFIG.handle, W / 2, 1150, F(800, 44), C.muted));
+    withAlpha(pe(t, 64.5, 64.9), () => {
+      text(CONFIG.handle, W / 2, 1150, F(800, 44), C.muted);
+      text("Contenido educativo · No es consejo financiero", W / 2, 1225, F(600, 26), "rgba(255,255,255,.45)");
+    });
   });
 }
 
@@ -737,13 +833,16 @@ function scene7(t) {
 //  CAPTIONS (voz en off)
 // ============================================================
 const VO = [
-  // [start, end, text, speaker]
-  [5.2, 15.0, "Sí. Primero tienes que entender el EV, el valor esperado: lo que ganas de media cada vez que repites algo. Con un 52 % de acierto a ratio 1:1, ganas 52 veces y pierdes 48. Cada trade te deja de media un +4 % de lo que arriesgas. Pequeño, pero positivo."],
-  [15.2, 20.0, "Con tus 1.000 dólares compras 10 cuentas de 100. Cada una se opera a todo o nada."],
-  [20.2, 32.0, "La evaluación pide 3.000 de objetivo, con una regla de consistencia del 50 %. Así que necesitas mínimo 2 días de 1.500. Dos trades ganados seguidos: 52 % por 52 %. Pasas un 27 % de las veces. De 10 cuentas, unas 3 llegan a fondeada."],
-  [32.2, 45.0, "Ya fondeado, puedes retirar el 50 % del beneficio cada 5 días verdes. Día 1: un trade 1:1 de 2.000, otra vez con un 52 %. Con ese colchón, los otros 4 días haces 200 con riesgo mínimo. Son 2.800 de beneficio y retiras la mitad: unos 1.260 después del split. Y la cuenta sigue viva."],
-  [45.2, 55.0, "27 % por 52 %: cada cuenta tiene un 14 % de llegar a payout. Con 10 cuentas, un 78 % de probabilidad de cobrar al menos una vez. Y el valor esperado del plan es de unos +770 dólares. Más un payout cada 5 días verdes mientras la cuenta siga viva."],
-  [55.2, 59.8, "Y no es teoría. Aquí están mis payouts."],
+  // [start, end, text] — narración (ver GUION.md)
+  [0.4, 7.0, "¿Se puede ser rentable en prop firms con solo 1.000 dólares y un 52 % de winrate? Vamos a verlo con matemáticas."],
+  [7.2, 15.0, "Primero, el EV: lo que ganas de media cada vez que repites algo. Con un 52 % a ratio 1:1, ganas 52 veces y pierdes 48. Eso deja +0,04R por trade. Pequeño, pero positivo."],
+  [15.2, 20.0, "Con 1.000 dólares compras 10 cuentas de 100. Cada una, a todo o nada."],
+  [20.2, 32.0, "La evaluación pide 3.000 de objetivo con regla de consistencia del 50 %: mínimo dos días de 1.500. Dos trades ganados seguidos: 52 % por 52 %, un 27 %. De 10 cuentas, unas 3 llegan a fondeada."],
+  [32.2, 40.0, "Pero ojo: en la fondeada, el día grande también es un 52 %. Si sale mal, la cuenta se quema. De esas 3, solo 1 o 2 sobreviven."],
+  [40.2, 53.0, "Las que sobreviven ya tienen un colchón de 2.000. Los otros 4 días haces 200 con riesgo mínimo. Son 2.800 en 5 días verdes, retiras la mitad: unos 1.260 después del split. Y la cuenta sigue viva."],
+  [53.2, 63.0, "Resumen: 27 % por 52 %, un 14 % de llegar a payout por cuenta. Con 10 cuentas, un 78 % de cobrar al menos una vez. Valor esperado del plan: unos +770 dólares."],
+  [63.2, 75.0, "Ahora imagina que tu winrate fuese un poco mayor. Con solo un 53 %, el EV sube a unos 880. Con un 55 %, casi 1.100. Y con un 60 %, más del doble: unos 1.700 dólares."],
+  [75.2, 79.8, "Por eso subir tu winrate lo cambia todo. Estos son payouts reales."],
 ];
 // split each line into ~5-7 word chunks, timed by character count
 const CAPS = [];
@@ -785,8 +884,9 @@ function renderFrame(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; noShadow();
   ctx.clearRect(0, 0, W, H);
   drawBackground(t);
-  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t); scene6(t); scene6b(t); scene7(t);
-  if (t < 59.8) captions(t);
+  // later scenes are authored on their own clock and shifted into place
+  scene1(t); scene2(t); scene3(t); scene4(t); sceneBig(t); scene5(t - 8); scene6(t - 8); sceneWR(t); scene6b(t - 20); scene7(t - 20);
+  if (t < 79.8) captions(t);
   // global fade in/out
   const fade = Math.max(1 - p(t, 0, .3), p(t, DURATION - .5, DURATION));
   if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, W, H); }
