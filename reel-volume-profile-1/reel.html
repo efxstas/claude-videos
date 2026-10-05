@@ -797,23 +797,11 @@ function scene5(t) {
       ctx.fillStyle = "rgba(34,197,94,.10)"; ctx.fillRect(CH.x0 - 10, yBot, CH.x1 - CH.x0 + 20, CH.y1 + 20 - yBot);
       text("BARATO · discount", W / 2 - 120, (yBot + CH.y1) / 2, F(900, 40), C.greenSoft);
     });
-    // mean reversion: VAH → POC (TP1) → VAL (TP2)
-    const mx = CH.cx0 + NC * CH.cw + 40;
-    const seg1 = pe(t, 56.0, 57.4, easeInOut), seg2 = pe(t, 58.2, 59.6, easeInOut);
-    if (t > 55.6) withAlpha(pe(t, 55.6, 55.9), () => {
-      ctx.strokeStyle = C.gold; ctx.lineWidth = 6; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(mx, yOf(VP.vah)); ctx.lineTo(mx, lerp(yOf(VP.vah), yOf(VP.poc), seg1)); ctx.stroke();
-      if (seg2 > 0) { ctx.beginPath(); ctx.moveTo(mx + 60, yOf(VP.poc)); ctx.lineTo(mx + 60, lerp(yOf(VP.poc), yOf(VP.val), seg2)); ctx.stroke(); }
-      ctx.beginPath(); ctx.arc(mx, yOf(VP.vah), 14, 0, 7); ctx.fillStyle = C.white; ctx.fill();
-      if (seg1 >= 1) { ctx.beginPath(); ctx.arc(mx, yOf(VP.poc), 14, 0, 7); ctx.fillStyle = C.gold; ctx.fill(); text("TP1", mx - 24, yOf(VP.poc) - 30, F(900, 30), C.gold); }
-      if (seg2 >= 1) { ctx.beginPath(); ctx.arc(mx + 60, yOf(VP.val), 14, 0, 7); ctx.fillStyle = C.gold; ctx.fill(); text("TP2", mx + 60, yOf(VP.val) + 34, F(900, 30), C.gold); }
-    });
   });
   infoLines([
     [46.6, "Techo: VAH · Suelo: VAL", C.white, 38],
     [50.6, "Es CONTEXTO, no una entrada", C.gold, 40],
-    [53.0, "En VAH / VAL → confirma con el footprint", TEAL_SOFT, 34],
-    [56.0, "Si rebota: TP1 en el POC · TP2 en el otro extremo", C.white, 32],
+    [53.0, "En esos niveles → confirma con otra herramienta", TEAL_SOFT, 34],
   ], t, 44, 63, 1320);
 }
 
@@ -882,7 +870,7 @@ const VO = [
   [8.8, 21.0, "El volumen normal te dice cuánto se negoció en cada vela, en el tiempo. El Volume Profile lo gira y te dice cuánto se negoció en cada precio. Es una radiografía de dónde ha estado el dinero."],
   [21.2, 31.0, "Las barras largas son precios donde el mercado se sintió cómodo y negoció mucho. Las cortas, precios que cruzó rápido. De aquí salen sus tres niveles más famosos."],
   [31.2, 44.0, "El POC, Point of Control: la barra más larga, el precio más aceptado. Actúa como un imán: el precio tiende a volver a él. Úsalo como objetivo en rotaciones dentro del rango, pero no esperes una reacción violenta ahí."],
-  [44.2, 63.0, "El Value Area es el bloque donde se negoció el 70 % del volumen. Su techo es el VAH y su suelo, el VAL. Por encima, el precio está caro; por debajo, barato. Pero es contexto, no una entrada: en VAH o VAL confirma con el footprint. Si rebota, TP1 en el POC y TP2 en el otro extremo."],
+  [44.2, 63.0, "El Value Area es el bloque donde se negoció el 70 % del volumen. Su techo es el VAH y su suelo, el VAL. Por encima, el precio está caro; por debajo, barato. Pero es contexto, no una entrada: en esos niveles, intenta confirmar con otra herramienta."],
   [63.2, 69.0, "Estos son los niveles que más vas a oír… y, para mí, los menos importantes."],
   [70.2, 72.6, "¿Y cuáles usas tú, entonces?"],
   [72.8, 76.8, "Eso te lo cuento en la Parte 2."],
