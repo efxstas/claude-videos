@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Volume Profile Parte 1</title>
+<style>
+  @font-face { font-family: "Inter"; src: url(assets/fonts/Inter.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JBM"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 700; }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const params = new URLSearchParams(location.search);
+const CONFIG = {
+  handle: params.get("handle") || "@alt_stas",
+  captions: params.get("captions") === "1",
+};
+const W = 1080, H = 1920;
+const DURATION = 81;
+
+const C = {
+  green: "#22c55e", greenSoft: "#4ade80", red: "#ef4444", redSoft: "#f87171",
+  gold: "#facc15", white: "#ffffff", ink: "#0b0f17", panel: "rgba(14,18,28,0.92)",
+  panelLine: "rgba(255,255,255,0.10)", muted: "rgba(255,255,255,0.62)",
+  claude: "#d97757", user: "#2b3445",
+};
+const F = (w, s, fam = "Inter") => `${w} ${s}px ${fam}, DejaVu Sans, sans-serif`;
+
+// ============================================================
+//  HELPERS
+// ============================================================
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeIn = k => k * k * k;
+const easeInOut = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const backOut = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+const p = (t, a, b) => clamp((t - a) / (b - a));          // linear 0..1
+const pe = (t, a, b, e = easeOut) => e(p(t, a, b));        // eased 0..1
+// scene alpha: fades in over [a, a+fi], out over [b-fo, b]
+const sceneAlpha = (t, a, b, fi = .35, fo = .35) => Math.min(p(t, a, a + fi), 1 - p(t, b - fo, b));
+const fmt = n => Math.round(n).toLocaleString("es-ES").replace(/ /g, ".").replace(/\s/g, ".");
+const fmtThousands = n => { const s = Math.round(n).toString(); return s.replace(/\B(?=(\d{3})+(?!\d))/g, "."); };
+
+let ctx;
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function text(s, x, y, font, color = C.white, align = "center", base = "middle") {
+  ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; ctx.fillText(s, x, y);
+}
+function wrap(s, maxW, font) {
+  ctx.font = font; const words = s.split(" "); const lines = []; let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line); return lines;
+}
+function withAlpha(a, fn) { if (a <= 0) return; ctx.save(); ctx.globalAlpha *= a; fn(); ctx.restore(); }
+function shadow(blur = 30, color = "rgba(0,0,0,.45)", oy = 10) { ctx.shadowBlur = blur; ctx.shadowColor = color; ctx.shadowOffsetY = oy; }
+function noShadow() { ctx.shadowBlur = 0; ctx.shadowColor = "transparent"; ctx.shadowOffsetY = 0; }
+// deterministic pseudo-random
+function rnd(i) { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
+// ============================================================
+//  ASSETS
+// ============================================================
+const imgBg = new Image(); imgBg.src = "assets/fondo-chart.png";
+
+// ============================================================
+//  BACKGROUND (the user's chart, slow pan + dark grade)
+// ============================================================
+function drawBackground(t) {
+  const ih = imgBg.naturalHeight, iw = imgBg.naturalWidth;
+  const s = H / ih * 1.04;
+  const dw = iw * s, dh = ih * s;
+  const maxX = dw - W;
+  const x = -maxX * easeInOut(clamp(t / DURATION));
+  const y = -(dh - H) / 2 + Math.sin(t * .25) * 6;
+  ctx.drawImage(imgBg, x, y, dw, dh);
+  // grade: dark navy tint so the gray chart reads as a moody trading screen
+  ctx.fillStyle = "rgba(6,10,20,0.70)"; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H * .45, 200, W / 2, H * .5, H * .75);
+  g.addColorStop(0, "rgba(30,60,120,0.10)"); g.addColorStop(1, "rgba(0,0,0,0.65)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// ============================================================
+//  COMMON UI
+// ============================================================
+function claudeIcon(cx, cy, r, t = 0, color = C.claude) {
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * .6);
+  ctx.strokeStyle = color; ctx.lineCap = "round"; ctx.lineWidth = r * .22;
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2, len = r * (i % 2 ? .78 : 1);
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * .18, Math.sin(a) * r * .18); ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len); ctx.stroke();
+  }
+  ctx.restore();
+}
+function chip(label, t, a, b) {
+  const al = sceneAlpha(t, a, b, .4, .3);
+  withAlpha(al, () => {
+    ctx.font = F(800, 26); const w = ctx.measureText(label).width + 48;
+    rr(W / 2 - w / 2, 214, w, 50, 25); ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 2; ctx.stroke();
+    text(label, W / 2, 240, F(800, 26), "rgba(255,255,255,0.85)");
+  });
+}
+// AI headline bubble used from scene 2 onward
+function aiBubble(msg, t, a, b, y = 290, opts = {}) {
+  const al = sceneAlpha(t, a, b, .35, .3);
+  if (al <= 0) return;
+  const k = pe(t, a, a + .45, backOut);
+  const font = F(700, opts.size || 38);
+  const lines = wrap(msg, 760, font);
+  const lh = (opts.size || 38) * 1.28;
+  const bh = Math.max(110, lines.length * lh + 52);
+  // streaming text: reveal characters
+  const total = msg.length;
+  const shown = Math.floor(total * p(t, a + .15, a + .15 + Math.min(1.6, total * .028)));
+  withAlpha(al, () => {
+    ctx.save(); ctx.translate(0, (1 - k) * 30);
+    shadow(40, "rgba(0,0,0,.5)", 14);
+    rr(60, y, 960, bh, 30); ctx.fillStyle = C.panel; ctx.fill(); noShadow();
+    ctx.strokeStyle = "rgba(217,119,87,0.45)"; ctx.lineWidth = 2.5; ctx.stroke();
+    claudeIcon(118, y + 56, 26, t, C.claude);
+    let count = 0;
+    lines.forEach((ln, i) => {
+      const rem = clamp(shown - count, 0, ln.length);
+      text(ln.slice(0, rem), 170, y + 26 + lh / 2 + i * lh, font, C.white, "left");
+      count += ln.length + 1;
+    });
+    ctx.restore();
+  });
+  return bh;
+}
+function formulaBox(str, t, a, b, y = 1385, color = C.white, size = 44) {
+  const al = sceneAlpha(t, a, b, .35, .3);
+  withAlpha(al, () => {
+    const k = pe(t, a, a + .5, backOut);
+    ctx.save(); ctx.translate(W / 2, y); ctx.scale(.85 + .15 * k, .85 + .15 * k);
+    ctx.font = F(700, size, "JBM"); const w = Math.min(1000, ctx.measureText(str).width + 70);
+    shadow(30, "rgba(0,0,0,.5)", 8);
+    rr(-w / 2, -48, w, 96, 22); ctx.fillStyle = "rgba(0,0,0,0.72)"; ctx.fill(); noShadow();
+    ctx.strokeStyle = "rgba(250,204,21,0.55)"; ctx.lineWidth = 2.5; ctx.stroke();
+    text(str, 0, 2, F(700, size, "JBM"), color);
+    ctx.restore();
+  });
+}
+
+
+function accountCard(x, y, w, h, opts = {}) {
+  const { dim = 0, glow = 0, price = true } = opts;
+  ctx.save();
+  if (glow > 0) { ctx.shadowBlur = 40 * glow; ctx.shadowColor = "rgba(34,197,94,.9)"; }
+  rr(x, y, w, h, 18);
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, "#1e293b"); g.addColorStop(1, "#0f172a");
+  ctx.fillStyle = g; ctx.fill(); noShadow();
+  ctx.strokeStyle = glow > 0 ? `rgba(74,222,128,${.4 + .6 * glow})` : "rgba(255,255,255,.18)"; ctx.lineWidth = glow > 0 ? 4 : 2; ctx.stroke();
+  text("CUENTA", x + w / 2, y + h * .2, F(800, Math.round(w * .12)), C.muted);
+  text("50K", x + w / 2, y + h * .43, F(900, Math.round(w * .3)), C.white);
+  if (price) {
+    rr(x + w * .18, y + h * .66, w * .64, h * .2, h * .1); ctx.fillStyle = "rgba(34,197,94,.18)"; ctx.fill();
+    text("100 $", x + w / 2, y + h * .76, F(800, Math.round(w * .14)), C.greenSoft);
+  }
+  if (dim > 0) { rr(x, y, w, h, 18); ctx.fillStyle = `rgba(5,8,14,${.72 * dim})`; ctx.fill(); }
+  ctx.restore();
+}
+
+function coin(x, y, r, t0, t, win) {
+  // spinning coin that lands at t0+0.9
+  if (t < t0) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); return; }
+  const k = p(t, t0, t0 + .9);
+  const jump = Math.sin(k * Math.PI) * 60;
+  const landed = k >= 1;
+  const sx = landed ? 1 : Math.abs(Math.cos(k * Math.PI * 6));
+  const color = landed ? (win ? C.green : C.red) : C.gold;
+  ctx.save(); ctx.translate(x, y - jump); ctx.scale(Math.max(.08, sx), 1);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 3; ctx.stroke();
+  if (landed) {
+    ctx.strokeStyle = C.white; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.beginPath();
+    if (win) { ctx.moveTo(-r * .4, 0); ctx.lineTo(-r * .1, r * .3); ctx.lineTo(r * .45, -r * .35); }
+    else { ctx.moveTo(-r * .35, -r * .35); ctx.lineTo(r * .35, r * .35); ctx.moveTo(r * .35, -r * .35); ctx.lineTo(-r * .35, r * .35); }
+    ctx.stroke();
+  } else text("$", 0, 1, F(900, r), "#78350f");
+  ctx.restore();
+}
+
+// ============================================================
+//  SMALL DRAWING HELPERS
+// ============================================================
+function check(x, y, r, win) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = win ? C.green : C.red; ctx.fill();
+  ctx.strokeStyle = C.white; ctx.lineWidth = Math.max(3, r * .22); ctx.lineCap = "round"; ctx.beginPath();
+  if (win) { ctx.moveTo(x - r * .4, y); ctx.lineTo(x - r * .1, y + r * .3); ctx.lineTo(x + r * .45, y - r * .35); }
+  else { ctx.moveTo(x - r * .35, y - r * .35); ctx.lineTo(x + r * .35, y + r * .35); ctx.moveTo(x + r * .35, y - r * .35); ctx.lineTo(x - r * .35, y + r * .35); }
+  ctx.stroke();
+}
+function popScale(t, t0, d = .45) { return pe(t, t0, t0 + d, backOut); }
+function scaled(cx, cy, k, fn) { if (k <= 0) return; ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k); ctx.translate(-cx, -cy); fn(); ctx.restore(); }
+function bullet(x, y, w, h, label, spent = 0) {
+  // vertical bullet: tip on top
+  ctx.save();
+  const g = ctx.createLinearGradient(x, 0, x + w, 0);
+  g.addColorStop(0, "#a16207"); g.addColorStop(.45, "#facc15"); g.addColorStop(1, "#854d0e");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(x, y + h * .35); ctx.quadraticCurveTo(x, y, x + w / 2, y); ctx.quadraticCurveTo(x + w, y, x + w, y + h * .35);
+  ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#713f12"; ctx.fillRect(x - 3, y + h * .35, w + 6, Math.max(4, h * .04));
+  if (label) text(label, x + w / 2, y + h * .68, F(900, Math.round(w * .28)), "#422006");
+  if (spent > 0) { ctx.fillStyle = `rgba(5,8,14,${.75 * spent})`; ctx.fillRect(x - 4, y - 2, w + 8, h + 4); }
+  ctx.restore();
+}
+
+// ============================================================
+//  UI: titulares directos (sin burbuja de IA)
+// ============================================================
+function headline(parts, t, a, b, y = 330, size = 56) {
+  // parts: [[text, color], ...] on one line, or array of lines via "\n" entries
+  const al = sceneAlpha(t, a, b, .3, .3);
+  if (al <= 0) return;
+  const k = pe(t, a, a + .4, backOut);
+  withAlpha(al, () => {
+    ctx.save(); ctx.translate(W / 2, y); ctx.scale(.9 + .1 * k, .9 + .1 * k);
+    ctx.font = F(900, size); ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    const total = parts.reduce((s, [tx]) => s + ctx.measureText(tx).width, 0);
+    let x = -total / 2;
+    for (const [tx, col] of parts) {
+      ctx.lineWidth = 12; ctx.strokeStyle = "rgba(0,0,0,.75)"; ctx.lineJoin = "round"; ctx.strokeText(tx, x, 0);
+      ctx.fillStyle = col; ctx.fillText(tx, x, 0); x += ctx.measureText(tx).width;
+    }
+    ctx.restore();
+  });
+}
+function badge(label, color, bg, t, a, b, y = 240) {
+  const al = sceneAlpha(t, a, b, .3, .3);
+  withAlpha(al, () => {
+    const k = pe(t, a, a + .4, backOut);
+    scaled(W / 2, y, k, () => {
+      ctx.font = F(900, 40); const w = ctx.measureText(label).width + 80;
+      shadow(40, color, 0);
+      rr(W / 2 - w / 2, y - 38, w, 76, 38); ctx.fillStyle = bg; ctx.fill(); noShadow();
+      ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
+      text(label, W / 2, y + 2, F(900, 40), color);
+    });
+  });
+}
+function photo(img, cx, cy, w, rot, k, opts = {}) {
+  if (k <= 0) return;
+  const h = img.naturalHeight * (w / img.naturalWidth);
+  const pad = opts.pad ?? 14;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot * (opts.settle ? 1 : 1)); ctx.scale(k, k);
+  shadow(60, "rgba(0,0,0,.7)", 24);
+  rr(-w / 2 - pad, -h / 2 - pad, w + pad * 2, h + pad * 2, 16); ctx.fillStyle = opts.frame || "#f8fafc"; ctx.fill(); noShadow();
+  ctx.save(); rr(-w / 2, -h / 2, w, h, 8); ctx.clip();
+  if (opts.src) ctx.drawImage(img, ...opts.src, -w / 2, -h / 2, w, h); else ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  ctx.restore(); ctx.restore();
+  return h;
+}
+function stamp(label, color, cx, cy, rot, k, size = 50) {
+  if (k <= 0) return;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); const s = 1.6 - .6 * k; ctx.scale(s, s); ctx.globalAlpha *= clamp(k * 2);
+  ctx.font = F(900, size); const w = ctx.measureText(label).width + 50;
+  rr(-w / 2, -size * .85, w, size * 1.7, 14); ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = 7; ctx.stroke();
+  text(label, 0, 3, F(900, size), color);
+  ctx.restore();
+}
+function flash(t, t0) { const f = 1 - p(t, t0, t0 + .35); if (t >= t0 && f > 0) { ctx.fillStyle = `rgba(255,255,255,${.7 * f})`; ctx.fillRect(0, 0, W, H); } }
+function ledger(rows, t, t0, y0 = 960) {
+  // rows: [label, value, color, big?]
+  rows.forEach(([lab, val, col, big], i) => {
+    const tt = t0 + i * .7, k = pe(t, tt, tt + .4);
+    if (k <= 0) return;
+    const y = y0 + i * 98 + (big ? 14 : 0);
+    withAlpha(k, () => {
+      ctx.save(); ctx.translate((1 - k) * 60, 0);
+      if (big) {
+        shadow(40, "rgba(250,204,21,.35)", 0);
+        rr(90, y - 54, 900, 108, 26); ctx.fillStyle = "rgba(250,204,21,.16)"; ctx.fill(); noShadow();
+        ctx.strokeStyle = "rgba(250,204,21,.75)"; ctx.lineWidth = 3; ctx.stroke();
+      } else { rr(90, y - 42, 900, 84, 20); ctx.fillStyle = "rgba(0,0,0,.65)"; ctx.fill(); }
+      text(lab, 125, y + 2, F(big ? 900 : 700, big ? 38 : 32), big ? C.gold : C.muted, "left");
+      text(val, 955, y + 2, F(900, big ? 60 : 46), col, "right");
+      ctx.restore();
+    });
+  });
+}
+function cardPos(i, layout) {
+  const col = i % 5, row = Math.floor(i / 5);
+  return { x: layout.x0 + col * (layout.w + layout.gap), y: layout.y0 + row * (layout.h + layout.gap) };
+}
+// 10-account grid with per-card result
+const G10 = { x0: 75, y0: 440, w: 170, h: 200, gap: 20 };
+function grid10(t, t0, results, tRes, opts = {}) {
+  // results[i]: "pay" | "burn" | "alive" ; label for pay
+  for (let i = 0; i < 10; i++) {
+    const cp = cardPos(i, G10);
+    const k = popScale(t, t0 + i * .06, .4);
+    const tr = tRes + i * .22, done = t > tr;
+    const res = results[i];
+    const glow = done && res === "pay" ? .75 + .25 * Math.sin(t * 6) : 0;
+    const shake = done && res === "burn" && t < tr + .35 ? Math.sin(t * 90) * 8 * (1 - p(t, tr, tr + .35)) : 0;
+    scaled(cp.x + G10.w / 2, cp.y + G10.h / 2, k, () => {
+      ctx.save(); ctx.translate(shake, 0);
+      accountCard(cp.x, cp.y, G10.w, G10.h, { price: !done, glow });
+      if (done) {
+        const d = p(t, tr, tr + .3);
+        if (res === "burn") {
+          rr(cp.x, cp.y, G10.w, G10.h, 18); ctx.fillStyle = `rgba(60,8,8,${.78 * d})`; ctx.fill();
+          withAlpha(d, () => { ctx.save(); ctx.translate(cp.x + G10.w / 2, cp.y + G10.h * .62); ctx.rotate(-.22);
+            rr(-78, -24, 156, 48, 10); ctx.strokeStyle = C.red; ctx.lineWidth = 4; ctx.stroke();
+            text("QUEMADA", 0, 2, F(900, 26), C.redSoft); ctx.restore(); });
+        } else if (res === "pay") {
+          withAlpha(d, () => { rr(cp.x + 12, cp.y + G10.h * .64, G10.w - 24, 50, 25); ctx.fillStyle = C.green; ctx.fill();
+            text(opts.payLabel || "PAYOUT", cp.x + G10.w / 2, cp.y + G10.h * .64 + 26, F(900, 24), C.ink); });
+        } else if (res === "alive") {
+          withAlpha(d, () => { rr(cp.x + 12, cp.y + G10.h * .64, G10.w - 24, 50, 25); ctx.fillStyle = "rgba(59,130,246,.85)"; ctx.fill();
+            text("SIGUE VIVA", cp.x + G10.w / 2, cp.y + G10.h * .64 + 26, F(900, 20), C.white); });
+        }
+      }
+      ctx.restore();
+    });
+  }
+}
+
+const EXTRA_IMAGES = [];
+const TEAL = "#14b8a6", TEAL_SOFT = "#5eead4", VPBLUE = "#3b82f6";
+
+// ============================================================
+//  DATOS: velas deterministas y su Volume Profile real
+// ============================================================
+const NB = 40, NC = 60;                 // niveles de precio, velas
+const VP = (() => {
+  let s = 20260521;
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += r(); return u - 3; };
+  const candles = []; let x = 15;
+  for (let i = 0; i < NC; i++) {
+    const center = i < 12 ? 12 + i * .7 : 21;            // sube y luego equilibra (balance)
+    const nx = clamp(x + .22 * (center - x) + gauss() * 2.1, 3, 36);
+    const o = x, c = nx;
+    const h = Math.min(38, Math.max(o, c) + r() * 1.8), l = Math.max(1, Math.min(o, c) - r() * 1.8);
+    candles.push({ o, h, l, c, v: .6 + r() * .9 });
+    x = nx;
+  }
+  // reescala el rango de precios para usar todo el alto del gráfico (niveles 4–36)
+  const mn = Math.min(...candles.map(c => c.l)), mx = Math.max(...candles.map(c => c.h));
+  const sc = v => 4 + (v - mn) / (mx - mn) * 32;
+  candles.forEach(c => { c.o = sc(c.o); c.h = sc(c.h); c.l = sc(c.l); c.c = sc(c.c); });
+  // volumen por precio: el volumen de cada vela se reparte entre los niveles que tocó
+  const contrib = candles.map(cd => {
+    const lo = Math.floor(cd.l), hi = Math.floor(cd.h), arr = new Array(NB).fill(0);
+    for (let b = lo; b <= hi; b++) arr[b] += cd.v / (hi - lo + 1);
+    return arr;
+  });
+  const prof = new Array(NB).fill(0);
+  contrib.forEach(a => a.forEach((v, b) => prof[b] += v));
+  const max = Math.max(...prof), poc = prof.indexOf(max);
+  // Value Area 70 %: desde el POC se añade el lado con más volumen hasta llegar al 70 %
+  const total = prof.reduce((a, b) => a + b, 0);
+  let lo = poc, hi = poc, acc = prof[poc];
+  while (acc < total * .7) {
+    const up = hi + 1 < NB ? prof[hi + 1] : -1, dn = lo - 1 >= 0 ? prof[lo - 1] : -1;
+    if (up >= dn) acc += prof[++hi]; else acc += prof[--lo];
+  }
+  return { candles, contrib, prof, max, poc, val: lo, vah: hi };
+})();
+
+// geometría del gráfico (escenas de monitor)
+const CH = { x0: 80, x1: 1000, y0: 500, y1: 1240, cw: 9, cx0: 95, px1: 1000, pmax: 330 };
+const yOf = b => CH.y1 - (b + .5) * (CH.y1 - CH.y0) / NB;      // centro del nivel b
+const BH = (CH.y1 - CH.y0) / NB;
+const yPrice = v => CH.y1 - v * (CH.y1 - CH.y0) / NB;            // precio continuo
+
+function drawCandles(t, opts = {}) {
+  const n = opts.count ?? NC, alpha = opts.alpha ?? 1;
+  withAlpha(alpha, () => {
+    for (let i = 0; i < n; i++) {
+      const cd = VP.candles[i], x = CH.cx0 + i * CH.cw;
+      const up = cd.c >= cd.o, col = up ? "#e5e7eb" : "#111827";
+      ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x + 3, yPrice(cd.h)); ctx.lineTo(x + 3, yPrice(cd.l)); ctx.stroke();
+      const yt = yPrice(Math.max(cd.o, cd.c)), yb = yPrice(Math.min(cd.o, cd.c));
+      ctx.fillStyle = col; ctx.fillRect(x, yt, 6, Math.max(2, yb - yt));
+      ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 1; ctx.strokeRect(x, yt, 6, Math.max(2, yb - yt));
+    }
+  });
+}
+function drawProfile(prof, opts = {}) {
+  const { color = VPBLUE, alpha = 1, colorFn } = opts;
+  withAlpha(alpha, () => {
+    for (let b = 0; b < NB; b++) {
+      const len = prof[b] / VP.max * CH.pmax;
+      if (len <= 0) continue;
+      ctx.fillStyle = colorFn ? colorFn(b) : color;
+      rr(CH.px1 - len, yOf(b) - BH * .38, len, BH * .76, 3); ctx.fill();
+    }
+  });
+}
+function chartFrame(al) {
+  withAlpha(al, () => {
+    rr(CH.x0 - 20, CH.y0 - 30, CH.x1 - CH.x0 + 40, CH.y1 - CH.y0 + 60, 24); ctx.fillStyle = "rgba(8,12,22,.82)"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 2; ctx.stroke();
+  });
+}
+function hline(b, color, dash, label, al = 1, lw = 4) {
+  withAlpha(al, () => {
+    const y = yOf(b);
+    ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash(dash || []);
+    ctx.beginPath(); ctx.moveTo(CH.x0 - 10, y); ctx.lineTo(CH.x1 + 10, y); ctx.stroke(); ctx.setLineDash([]);
+    if (label) {
+      ctx.font = F(900, 30); const w = ctx.measureText(label).width + 28;
+      rr(CH.x0 - 10, y - 22, w, 44, 10); ctx.fillStyle = color; ctx.fill();
+      text(label, CH.x0 - 10 + w / 2, y + 1, F(900, 30), C.ink);
+    }
+  });
+}
+function infoLines(lines, t, a, b, y0 = 1330) {
+  // lines: [[t0, text, color, size]]
+  const al = sceneAlpha(t, a, b, .3, .3);
+  withAlpha(al, () => lines.forEach(([t0, s, col, size = 38], i) => {
+    const k = pe(t, t0, t0 + .4);
+    if (k <= 0) return;
+    withAlpha(k, () => {
+      ctx.save(); ctx.translate(0, (1 - k) * 20);
+      ctx.font = F(800, size); const w = Math.min(980, ctx.measureText(s).width + 50);
+      rr(W / 2 - w / 2, y0 + i * 78 - 32, w, 64, 18); ctx.fillStyle = "rgba(0,0,0,.72)"; ctx.fill();
+      text(s, W / 2, y0 + i * 78 + 1, F(800, size), col);
+      ctx.restore();
+    });
+  }));
+}
+
+// ============================================================
+//  LA HABITACIÓN: trader en el escritorio + visitante
+// ============================================================
+const SKIN1 = "#d9a47c", SKIN2 = "#f0c39b";
+function speech(textStr, x, y, w, tailX, tailY, t, t0, t1, opts = {}) {
+  const al = Math.min(pe(t, t0, t0 + .25), 1 - p(t, t1 - .25, t1));
+  if (al <= 0) return;
+  const k = pe(t, t0, t0 + .35, backOut);
+  const font = F(800, opts.size || 44), lines = wrap(textStr, w - 70, font), lh = (opts.size || 44) * 1.25;
+  const h = lines.length * lh + 56;
+  withAlpha(al, () => scaled(tailX, tailY, .6 + .4 * k, () => {
+    shadow(30, "rgba(0,0,0,.45)", 10);
+    ctx.fillStyle = opts.bg || "#ffffff";
+    rr(x, y, w, h, 34); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(clamp(tailX, x + 40, x + w - 40) - 22, y + h - 2); ctx.lineTo(tailX, tailY); ctx.lineTo(clamp(tailX, x + 40, x + w - 40) + 22, y + h - 2); ctx.fill();
+    noShadow();
+    lines.forEach((ln, i) => text(ln, x + w / 2, y + 28 + lh / 2 + i * lh, font, opts.color || C.ink));
+  }));
+}
+function face(hx, hy, r, dir, talk, skin, opts = {}) {
+  ctx.beginPath(); ctx.arc(hx, hy, r, 0, 7); ctx.fillStyle = skin; ctx.fill();
+  // pelo / gorra
+  if (opts.cap) {
+    ctx.fillStyle = opts.cap;
+    ctx.beginPath(); ctx.arc(hx, hy - r * .15, r * 1.02, Math.PI, 0); ctx.fill();
+    rr(hx + (dir > 0 ? 0 : -r * 1.55), hy - r * .3, r * 1.55, r * .28, 6); ctx.fill();
+  } else {
+    ctx.fillStyle = opts.hair || "#1f2937";
+    ctx.beginPath(); ctx.arc(hx - dir * r * .1, hy - r * .1, r * 1.03, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx - dir * r * .55, hy - r * .1, r * .55, 0, 7); ctx.fill();
+  }
+  // ojo + boca (perfil 3/4)
+  ctx.fillStyle = C.ink;
+  ctx.beginPath(); ctx.arc(hx + dir * r * .42, hy - r * .05, r * .1, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(hx + dir * r * .05, hy - r * .05, r * .09, 0, 7); ctx.fill();
+  const mo = talk ? (Math.sin(talk * 22) * .5 + .5) * r * .18 : 0;
+  ctx.beginPath(); ctx.ellipse(hx + dir * r * .3, hy + r * .42, r * .2, mo + r * .04, 0, 0, 7); ctx.fillStyle = "#7f1d1d"; ctx.fill();
+}
+function trader(t, turn, typing, talkT) {
+  // turn: 0 = mira al monitor (izquierda), 1 = mira al visitante (derecha)
+  const flip = turn < .5 ? -1 : 1, squash = Math.max(.12, Math.abs(1 - 2 * turn));
+  const X = 720, SEAT = 1365;
+  ctx.save(); ctx.translate(X, SEAT); ctx.scale(flip * squash, 1);
+  // silla
+  ctx.fillStyle = "#111827";
+  rr(-110, -250, 34, 250, 14); ctx.fill();                 // respaldo (detrás)
+  rr(-95, -8, 190, 26, 12); ctx.fill();                    // asiento
+  ctx.fillRect(-8, 18, 16, 80);
+  ctx.strokeStyle = "#111827"; ctx.lineWidth = 10; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-70, 120); ctx.lineTo(70, 120); ctx.stroke();
+  // piernas
+  ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 34;
+  ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(115, -2); ctx.lineTo(118, 130); ctx.stroke();
+  ctx.fillStyle = "#0f172a"; rr(100, 120, 60, 22, 10); ctx.fill();
+  // torso (sudadera)
+  const breath = Math.sin(t * 2.4) * 3;
+  rr(-55, -215 + breath, 110, 215, 46); ctx.fillStyle = "#374151"; ctx.fill();
+  ctx.strokeStyle = "#9ca3af"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(10, -190 + breath); ctx.lineTo(14, -140 + breath); ctx.moveTo(26, -190 + breath); ctx.lineTo(30, -145 + breath); ctx.stroke();
+  // auriculares al cuello
+  ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.arc(8, -205 + breath, 34, .1 * Math.PI, .9 * Math.PI); ctx.stroke();
+  // brazos
+  ctx.strokeStyle = "#374151"; ctx.lineWidth = 28; ctx.lineCap = "round";
+  const ty = typing ? Math.sin(t * 18) * 4 : 0;
+  if (turn < .5) {
+    ctx.beginPath(); ctx.moveTo(15, -175 + breath); ctx.lineTo(80, -95); ctx.lineTo(170, -120 + ty); ctx.stroke();
+    ctx.fillStyle = SKIN1; ctx.beginPath(); ctx.arc(178, -120 + ty, 14, 0, 7); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.moveTo(15, -175 + breath); ctx.lineTo(55, -80); ctx.lineTo(115, -40); ctx.stroke();
+    ctx.fillStyle = SKIN1; ctx.beginPath(); ctx.arc(122, -38, 14, 0, 7); ctx.fill();
+  }
+  // cabeza
+  ctx.restore();
+  ctx.save(); ctx.translate(X, SEAT); ctx.scale(flip, 1);
+  face(18, -268 + breath, 56, 1, talkT, SKIN1, { hair: "#111827" });
+  ctx.restore();
+}
+function visitor(t, x, walking, talkT, dir = -1) {
+  const FY = 1600, ph = walking ? t * 9 : 0, sw = walking ? Math.sin(ph) : 0;
+  ctx.save(); ctx.translate(x, FY);
+  ctx.strokeStyle = "#1e3a8a"; ctx.lineWidth = 32; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(0, -200); ctx.lineTo(sw * 34, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -200); ctx.lineTo(-sw * 34, 0); ctx.stroke();
+  ctx.fillStyle = "#f8fafc"; rr(sw * 34 - 22 + dir * 8, -12, 48, 22, 10); ctx.fill(); rr(-sw * 34 - 22 + dir * 8, -12, 48, 22, 10); ctx.fill();
+  const bob = walking ? Math.abs(Math.sin(ph)) * -6 : 0;
+  rr(-58, -430 + bob, 116, 245, 44); ctx.fillStyle = "#0d9488"; ctx.fill();
+  ctx.strokeStyle = "#0d9488"; ctx.lineWidth = 28;
+  ctx.beginPath(); ctx.moveTo(0, -390 + bob); ctx.lineTo(-sw * 40 + dir * 10, -270 + bob); ctx.lineTo(-sw * 30 + dir * 20, -200 + bob); ctx.stroke();
+  ctx.fillStyle = SKIN2; ctx.beginPath(); ctx.arc(-sw * 30 + dir * 20, -192 + bob, 14, 0, 7); ctx.fill();
+  face(0, -490 + bob, 58, dir, talkT, SKIN2, { cap: "#f97316" });
+  ctx.restore();
+}
+function room(t, st) {
+  // pared + suelo
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#151a2e"); g.addColorStop(.75, "#241b33"); g.addColorStop(.76, "#17131f"); g.addColorStop(1, "#0e0b14");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // cuadro con tu gráfico en la pared
+  ctx.save(); ctx.globalAlpha = .9;
+  rr(110, 430, 430, 290, 10); ctx.fillStyle = "#0b0f17"; ctx.fill();
+  ctx.drawImage(imgBg, 0, 0, imgBg.naturalWidth, imgBg.naturalHeight, 125, 445, 400, 260);
+  ctx.fillStyle = "rgba(10,14,25,.35)"; ctx.fillRect(125, 445, 400, 260);
+  ctx.restore();
+  // letrero neón
+  ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = "#22d3ee";
+  text(CONFIG.handle, 800, 560, F(900, 54), "#a5f3fc"); ctx.restore();
+  // luz de los monitores
+  const lg = ctx.createRadialGradient(330, 1100, 50, 330, 1100, 520);
+  lg.addColorStop(0, "rgba(59,130,246,.22)"); lg.addColorStop(1, "rgba(59,130,246,0)");
+  ctx.fillStyle = lg; ctx.fillRect(0, 600, 900, 1000);
+  // alfombra
+  ctx.beginPath(); ctx.ellipse(560, 1650, 470, 70, 0, 0, 7); ctx.fillStyle = "rgba(255,255,255,.04)"; ctx.fill();
+  // mesa
+  ctx.fillStyle = "#5b4636"; rr(60, 1245, 560, 30, 8); ctx.fill();
+  ctx.fillStyle = "#3f3127"; ctx.fillRect(80, 1275, 26, 330); ctx.fillRect(574, 1275, 26, 330);
+  // monitores
+  monitor(95, 985, 250, 165, t, 0); monitor(360, 985, 250, 165, t, 1);
+  // teclado + taza
+  rr(400, 1228, 170, 16, 5); ctx.fillStyle = "#1f2937"; ctx.fill();
+  rr(110, 1195, 40, 50, 8); ctx.fillStyle = "#e5e7eb"; ctx.fill();
+  ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(152, 1218, 12, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+  trader(t, st.turn, st.typing, st.traderTalk);
+  if (st.visitorX < W + 150) visitor(t, st.visitorX, st.walking, st.visitorTalk);
+}
+function monitor(x, y, w, h, t, kind) {
+  ctx.fillStyle = "#0b0f17"; rr(x - 8, y - 8, w + 16, h + 16, 10); ctx.fill();
+  ctx.fillStyle = "#111827"; ctx.fillRect(x + w / 2 - 10, y + h + 8, 20, 1245 - (y + h + 8));
+  rr(x + w / 2 - 50, 1236, 100, 10, 4); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.fillStyle = "#0f172a"; ctx.fillRect(x, y, w, h);
+  if (kind === 0) {
+    const off = Math.floor(t * 3) % 20;
+    for (let i = 0; i < 26; i++) {
+      const cd = VP.candles[(i + off) % NC];
+      const cx = x + 10 + i * 9, sy = v => y + h - 10 - v / NB * (h - 20);
+      ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx + 2, sy(cd.h)); ctx.lineTo(cx + 2, sy(cd.l)); ctx.stroke();
+      ctx.fillStyle = cd.c >= cd.o ? "#22c55e" : "#ef4444";
+      ctx.fillRect(cx, sy(Math.max(cd.o, cd.c)), 5, Math.max(1, sy(Math.min(cd.o, cd.c)) - sy(Math.max(cd.o, cd.c))));
+    }
+  } else {
+    for (let b = 0; b < NB; b++) {
+      const len = VP.prof[b] / VP.max * (w - 40);
+      ctx.fillStyle = b === VP.poc ? TEAL : "rgba(59,130,246,.8)";
+      ctx.fillRect(x + w - 10 - len, y + h - 8 - (b + 1) * (h - 16) / NB, len, (h - 16) / NB - 1);
+    }
+  }
+  ctx.restore();
+}
+
+// ============================================================
+//  ESCENA 1 : la pregunta (0–8.6)
+// ============================================================
+function zoomInto(t, a, b, cx, cy, fn) {
+  // dibuja fn con zoom creciente hacia (cx, cy)
+  const k = pe(t, a, b, easeIn);
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(1 + k * 3, 1 + k * 3); ctx.translate(-cx, -cy); fn(); ctx.restore();
+  if (k > 0) { ctx.fillStyle = `rgba(6,10,20,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+function scene1(t) {
+  if (t > 8.7) return;
+  const walkIn = pe(t, .8, 2.6, easeOut);
+  zoomInto(t, 7.6, 8.6, 485, 1070, () => room(t, {
+    turn: pe(t, 4.6, 5.0, easeInOut), typing: t < 4.6,
+    visitorX: lerp(W + 140, 960, walkIn), walking: t > .8 && t < 2.6,
+    visitorTalk: t > 2.7 && t < 4.6 ? t : 0, traderTalk: t > 5.2 && t < 7.4 ? t : 0,
+  }));
+  speech("Oye… ¿qué es eso del Volume Profile?", 480, 640, 560, 950, 1040, t, 2.7, 5.2);
+  speech("Dame tu tiempo y te lo explico.", 330, 820, 520, 740, 1040, t, 5.2, 7.7);
+  chip("VOLUME PROFILE · PARTE 1", t, .2, 8);
+}
+
+// ============================================================
+//  ESCENA 2 : qué es (8.6–21) · volumen por tiempo → por precio
+// ============================================================
+function scene2(t) {
+  if (t < 8.4 || t > 21.4) return;
+  const al = sceneAlpha(t, 8.6, 21, .4, .35);
+  chip("VOLUME PROFILE · PARTE 1", t, 8.6, 21);
+  headline([["¿Qué es el ", C.white], ["Volume Profile", TEAL_SOFT], ["?", C.white]], t, 8.8, 21, 340, 54);
+  withAlpha(al, () => {
+    chartFrame(1);
+    const nC = Math.round(NC * pe(t, 9.0, 10.6, easeInOut));
+    drawCandles(t, { count: nC });
+    // volumen por tiempo (barras verticales debajo de cada vela)
+    const vt = pe(t, 10.8, 11.4) * (1 - pe(t, 15.6, 16.2));
+    withAlpha(vt, () => {
+      VP.candles.forEach((cd, i) => {
+        const hgt = cd.v * 70, x = CH.cx0 + i * CH.cw;
+        ctx.fillStyle = "rgba(148,163,184,.75)"; ctx.fillRect(x, CH.y1 + 120 - hgt, 6, hgt);
+      });
+      text("Volumen por TIEMPO (cada vela)", CH.cx0, CH.y1 + 150, F(800, 30), C.muted, "left");
+    });
+    // barrido: cada vela "deja" su volumen en sus precios
+    const k = p(t, 12.6, 15.6), done = Math.floor(NC * k);
+    if (t > 12.6) {
+      const prof = new Array(NB).fill(0);
+      for (let i = 0; i < done; i++) VP.contrib[i].forEach((v, b) => prof[b] += v);
+      drawProfile(prof, { alpha: .9 });
+      if (k < 1) {
+        const sx = CH.cx0 + done * CH.cw;
+        ctx.strokeStyle = TEAL_SOFT; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx, CH.y0); ctx.lineTo(sx, CH.y1); ctx.stroke();
+        const cd = VP.candles[Math.min(NC - 1, done)];
+        withAlpha(.8, () => { ctx.fillStyle = "rgba(94,234,212,.25)"; ctx.fillRect(sx, yPrice(cd.h), CH.px1 - sx, yPrice(cd.l) - yPrice(cd.h)); });
+      }
+    }
+    withAlpha(pe(t, 16.0, 16.4), () => {
+      rr(CH.px1 - 330, CH.y1 + 70, 330, 64, 16); ctx.fillStyle = "rgba(59,130,246,.25)"; ctx.fill();
+      text("Volumen por PRECIO", CH.px1 - 165, CH.y1 + 103, F(900, 32), "#93c5fd");
+    });
+  });
+  formulaBox("Dónde se negoció, no cuándo", t, 17.4, 21, 1470, C.gold, 44);
+}
+
+// ============================================================
+//  ESCENA 3 : cómo leerlo (21–31)
+// ============================================================
+const LONG = VP.max * .72, SHORT = VP.max * .28;
+function scene3(t) {
+  if (t < 20.8 || t > 31.4) return;
+  chip("VOLUME PROFILE · PARTE 1", t, 21, 31);
+  headline([["Cómo se lee", C.white]], t, 21, 31, 340, 56);
+  const al = sceneAlpha(t, 21, 31, .4, .35);
+  withAlpha(al, () => {
+    chartFrame(1);
+    drawCandles(t, { alpha: .35 });
+    const hiK = pe(t, 22.0, 22.5), loK = pe(t, 24.6, 25.1);
+    drawProfile(VP.prof, {
+      colorFn: b => VP.prof[b] >= LONG ? `rgba(${lerp(59, 94, hiK)},${lerp(130, 234, hiK)},${lerp(246, 212, hiK)},1)`
+        : VP.prof[b] <= SHORT ? `rgba(${lerp(59, 248, loK)},${lerp(130, 113, loK)},${lerp(246, 113, loK)},1)` : "rgba(59,130,246,.55)",
+    });
+  });
+  infoLines([
+    [22.4, "Barras LARGAS → mucho volumen → precio ACEPTADO", TEAL_SOFT, 34],
+    [25.0, "Barras CORTAS → poco volumen → lo cruzó RÁPIDO", C.redSoft, 34],
+  ], t, 21, 31, 1330);
+  withAlpha(sceneAlpha(t, 27.8, 31), () => {
+    text("De aquí salen sus 3 niveles más famosos:", W / 2, 1500, F(800, 34), C.white);
+    ["POC", "VAH", "VAL"].forEach((s, i) => scaled(330 + i * 210, 1570, popScale(t, 28.4 + i * .25), () => {
+      rr(330 + i * 210 - 85, 1540, 170, 60, 30); ctx.fillStyle = TEAL; ctx.fill();
+      text(s, 330 + i * 210, 1571, F(900, 34), C.ink);
+    }));
+  });
+}
+
+// ============================================================
+//  ESCENA 4 : POC (31–44)
+// ============================================================
+function scene4(t) {
+  if (t < 30.8 || t > 44.4) return;
+  badge("POC · Point of Control", TEAL_SOFT, "rgba(13,74,70,.92)", t, 31, 44, 330);
+  const al = sceneAlpha(t, 31, 44, .4, .35);
+  withAlpha(al, () => {
+    chartFrame(1);
+    drawCandles(t, { alpha: .4 });
+    const k = pe(t, 31.6, 32.2);
+    drawProfile(VP.prof, { colorFn: b => b === VP.poc ? (k > 0 ? TEAL : VPBLUE) : `rgba(59,130,246,${lerp(.9, .4, k)})` });
+    if (k > 0) {
+      // la barra más larga brilla
+      const len = CH.pmax;
+      withAlpha(k, () => { ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = TEAL_SOFT; rr(CH.px1 - len, yOf(VP.poc) - BH * .38, len, BH * .76, 3); ctx.fillStyle = TEAL_SOFT; ctx.fill(); ctx.restore(); });
+      hline(VP.poc, TEAL, null, "POC", pe(t, 32.4, 32.8), 4);
+    }
+    // efecto imán: el precio se aleja y vuelve al POC
+    if (t > 35.0 && t < 40.6) {
+      const tt = t - 35.0;
+      const off = 9 * Math.exp(-tt * .9) * Math.cos(tt * 3.1);
+      const y = yOf(VP.poc + off), x = CH.cx0 + NC * CH.cw + 30;
+      withAlpha(pe(t, 35.0, 35.3) * (1 - p(t, 40.2, 40.6)), () => {
+        ctx.setLineDash([8, 8]); ctx.strokeStyle = C.gold; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, yOf(VP.poc)); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(x, y, 16, 0, 7); ctx.fillStyle = C.gold; ctx.fill();
+        text("PRECIO", x + 28, y, F(900, 24), C.gold, "left");
+      });
+    }
+  });
+  infoLines([
+    [33.0, "La barra más larga = el precio más ACEPTADO", C.white, 36],
+    [35.4, "Actúa como un IMÁN", C.gold, 40],
+    [39.6, "TP en rotaciones dentro del rango", TEAL_SOFT, 34],
+    [41.2, "No esperes una reacción violenta ahí", C.redSoft, 34],
+  ], t, 31, 44, 1320);
+}
+
+// ============================================================
+//  ESCENA 5 : Value Area · VAH / VAL (44–63)
+// ============================================================
+function scene5(t) {
+  if (t < 43.8 || t > 63.4) return;
+  badge("VALUE AREA · 70 %", TEAL_SOFT, "rgba(13,74,70,.92)", t, 44, 63, 330);
+  const al = sceneAlpha(t, 44, 63, .4, .35);
+  withAlpha(al, () => {
+    chartFrame(1);
+    const yTop = yOf(VP.vah) - BH / 2, yBot = yOf(VP.val) + BH / 2;
+    // bloque del 70 %
+    const k = pe(t, 44.6, 45.4, easeInOut);
+    withAlpha(k, () => { ctx.fillStyle = "rgba(20,184,166,.16)"; ctx.fillRect(CH.x0 - 10, yTop, CH.x1 - CH.x0 + 20, yBot - yTop); });
+    drawCandles(t, { alpha: .4 });
+    drawProfile(VP.prof, { colorFn: b => b === VP.poc ? TEAL : (b >= VP.val && b <= VP.vah && k > 0) ? "rgba(94,234,212,.75)" : "rgba(59,130,246,.45)" });
+    hline(VP.poc, TEAL, [12, 10], null, .9, 3);
+    hline(VP.vah, TEAL_SOFT, null, "VAH", pe(t, 45.4, 45.8), 4);
+    hline(VP.val, TEAL_SOFT, null, "VAL", pe(t, 45.8, 46.2), 4);
+    withAlpha(pe(t, 46.4, 46.8), () => {
+      rr(CH.px1 - 250, (yTop + yBot) / 2 - 34, 230, 68, 16); ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fill();
+      text("70 % del volumen", CH.px1 - 135, (yTop + yBot) / 2 + 1, F(900, 28), TEAL_SOFT);
+    });
+    // caro / barato
+    withAlpha(pe(t, 48.0, 48.4), () => {
+      ctx.fillStyle = "rgba(239,68,68,.10)"; ctx.fillRect(CH.x0 - 10, CH.y0 - 20, CH.x1 - CH.x0 + 20, yTop - CH.y0 + 20);
+      text("CARO · premium", W / 2 - 120, (CH.y0 + yTop) / 2, F(900, 40), C.redSoft);
+    });
+    withAlpha(pe(t, 49.0, 49.4), () => {
+      ctx.fillStyle = "rgba(34,197,94,.10)"; ctx.fillRect(CH.x0 - 10, yBot, CH.x1 - CH.x0 + 20, CH.y1 + 20 - yBot);
+      text("BARATO · discount", W / 2 - 120, (yBot + CH.y1) / 2, F(900, 40), C.greenSoft);
+    });
+    // mean reversion: VAH → POC (TP1) → VAL (TP2)
+    const mx = CH.cx0 + NC * CH.cw + 40;
+    const seg1 = pe(t, 56.0, 57.4, easeInOut), seg2 = pe(t, 58.2, 59.6, easeInOut);
+    if (t > 55.6) withAlpha(pe(t, 55.6, 55.9), () => {
+      ctx.strokeStyle = C.gold; ctx.lineWidth = 6; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(mx, yOf(VP.vah)); ctx.lineTo(mx, lerp(yOf(VP.vah), yOf(VP.poc), seg1)); ctx.stroke();
+      if (seg2 > 0) { ctx.beginPath(); ctx.moveTo(mx + 60, yOf(VP.poc)); ctx.lineTo(mx + 60, lerp(yOf(VP.poc), yOf(VP.val), seg2)); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(mx, yOf(VP.vah), 14, 0, 7); ctx.fillStyle = C.white; ctx.fill();
+      if (seg1 >= 1) { ctx.beginPath(); ctx.arc(mx, yOf(VP.poc), 14, 0, 7); ctx.fillStyle = C.gold; ctx.fill(); text("TP1", mx - 24, yOf(VP.poc) - 30, F(900, 30), C.gold); }
+      if (seg2 >= 1) { ctx.beginPath(); ctx.arc(mx + 60, yOf(VP.val), 14, 0, 7); ctx.fillStyle = C.gold; ctx.fill(); text("TP2", mx + 60, yOf(VP.val) + 34, F(900, 30), C.gold); }
+    });
+  });
+  infoLines([
+    [46.6, "Techo: VAH · Suelo: VAL", C.white, 38],
+    [50.6, "Es CONTEXTO, no una entrada", C.gold, 40],
+    [53.0, "En VAH / VAL → confirma con el footprint", TEAL_SOFT, 34],
+    [56.0, "Si rebota: TP1 en el POC · TP2 en el otro extremo", C.white, 32],
+  ], t, 44, 63, 1320);
+}
+
+// ============================================================
+//  ESCENA 6 : el giro (63–69)
+// ============================================================
+function scene6(t) {
+  if (t < 62.8 || t > 69.4) return;
+  const al = sceneAlpha(t, 63, 69, .4, .35);
+  withAlpha(al, () => {
+    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, 0, W, H);
+    ["POC", "VAH", "VAL"].forEach((s, i) => scaled(240 + i * 300, 760, popScale(t, 63.2 + i * .2), () => {
+      rr(240 + i * 300 - 120, 715, 240, 90, 45); ctx.fillStyle = TEAL; ctx.fill();
+      text(s, 240 + i * 300, 762, F(900, 48), C.ink);
+    }));
+    withAlpha(pe(t, 66.0, 66.4), () => {
+      [0, 1, 2].forEach(i => { ctx.strokeStyle = C.redSoft; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(240 + i * 300 - 110, 785); ctx.lineTo(240 + i * 300 + 110, 735); ctx.stroke(); });
+    });
+  });
+  headline([["Los niveles que más vas a oír…", C.white]], t, 63.6, 69, 940, 50);
+  headline([["…y para mí, los ", C.white], ["MENOS importantes.", C.redSoft]], t, 65.2, 69, 1030, 50);
+}
+
+// ============================================================
+//  ESCENA 7 : vuelta a la habitación · cliffhanger (69–77)
+// ============================================================
+function scene7(t) {
+  if (t < 68.8 || t > 77.4) return;
+  const k = 1 - pe(t, 69, 69.8, easeOut);           // zoom out desde el monitor
+  ctx.save(); ctx.translate(485, 1070); ctx.scale(1 + k * 3, 1 + k * 3); ctx.translate(-485, -1070);
+  room(t, { turn: 1, typing: false, visitorX: 960, walking: false,
+    visitorTalk: t > 70.2 && t < 72.4 ? t : 0, traderTalk: t > 72.8 && t < 75.6 ? t : 0 });
+  ctx.restore();
+  if (k > 0) { ctx.fillStyle = `rgba(6,10,20,${k})`; ctx.fillRect(0, 0, W, H); }
+  speech("¿Y cuáles usas tú, entonces?", 480, 640, 560, 950, 1040, t, 70.2, 72.8);
+  speech("Eso te lo cuento en la Parte 2.", 330, 820, 520, 740, 1040, t, 72.8, 77.2);
+}
+
+// ============================================================
+//  ESCENA 8 : cierre (77–81)
+// ============================================================
+function scene8(t) {
+  if (t < 76.8) return;
+  ctx.fillStyle = `rgba(0,0,0,${.85 * pe(t, 76.8, 77.4)})`; ctx.fillRect(0, 0, W, H);
+  withAlpha(pe(t, 77.2, 77.7), () => {
+    const k = pe(t, 77.2, 77.8, backOut);
+    scaled(W / 2, 780, k, () => {
+      text("VOLUME PROFILE", W / 2, 740, F(900, 88), TEAL_SOFT);
+      text("Parte 1 · POC, VAH y VAL", W / 2, 840, F(800, 44), C.white);
+    });
+  });
+  withAlpha(pe(t, 78.2, 78.6), () => {
+    rr(W / 2 - 330, 960, 660, 100, 50); ctx.fillStyle = C.gold; ctx.fill();
+    text("Sígueme para la Parte 2", W / 2, 1012, F(900, 44), C.ink);
+    text(CONFIG.handle, W / 2, 1150, F(800, 44), C.muted);
+    text("Contenido educativo · No es consejo financiero", W / 2, 1220, F(600, 26), "rgba(255,255,255,.45)");
+  });
+}
+
+// ============================================================
+//  NARRACIÓN (subtítulos opcionales con --captions)
+// ============================================================
+const VO = [
+  [2.7, 5.0, "Oye… ¿qué es eso del Volume Profile?"],
+  [5.2, 7.6, "Dame tu tiempo y te lo explico."],
+  [8.8, 21.0, "El volumen normal te dice cuánto se negoció en cada vela, en el tiempo. El Volume Profile lo gira y te dice cuánto se negoció en cada precio. Es una radiografía de dónde ha estado el dinero."],
+  [21.2, 31.0, "Las barras largas son precios donde el mercado se sintió cómodo y negoció mucho. Las cortas, precios que cruzó rápido. De aquí salen sus tres niveles más famosos."],
+  [31.2, 44.0, "El POC, Point of Control: la barra más larga, el precio más aceptado. Actúa como un imán: el precio tiende a volver a él. Úsalo como objetivo en rotaciones dentro del rango, pero no esperes una reacción violenta ahí."],
+  [44.2, 63.0, "El Value Area es el bloque donde se negoció el 70 % del volumen. Su techo es el VAH y su suelo, el VAL. Por encima, el precio está caro; por debajo, barato. Pero es contexto, no una entrada: en VAH o VAL confirma con el footprint. Si rebota, TP1 en el POC y TP2 en el otro extremo."],
+  [63.2, 69.0, "Estos son los niveles que más vas a oír… y, para mí, los menos importantes."],
+  [70.2, 72.6, "¿Y cuáles usas tú, entonces?"],
+  [72.8, 76.8, "Eso te lo cuento en la Parte 2."],
+  [77.2, 81.0, "Sígueme para no perdértela."],
+];
+
+const CAPS = [];
+for (const [a, b, s] of VO) {
+  const words = s.split(" "); const chunks = []; let cur = [];
+  for (const w of words) { cur.push(w); if (cur.length >= 6 || /[.:,]$/.test(w) && cur.length >= 3) { chunks.push(cur.join(" ")); cur = []; } }
+  if (cur.length) chunks.push(cur.join(" "));
+  const tot = chunks.reduce((n, c) => n + c.length + 6, 0); let acc = a;
+  for (const c of chunks) { const d = (b - a) * (c.length + 6) / tot; CAPS.push([acc, acc + d, c]); acc += d; }
+}
+const HL = /(\d[\d.,]*\s?%?|EV|\+?\d[\d.]*\s?\$|payout|positivo|fondeada|todo o nada)/i;
+function captions(t) {
+  if (!CONFIG.captions) return;
+  const c = CAPS.find(c => t >= c[0] && t < c[1]);
+  if (!c) return;
+  const k = pe(t, c[0], c[0] + .12, backOut);
+  const font = F(900, 46);
+  const lines = wrap(c[2], 900, font);
+  ctx.save(); ctx.translate(W / 2, 1530); ctx.scale(.9 + .1 * k, .9 + .1 * k);
+  lines.forEach((ln, i) => {
+    const y = (i - (lines.length - 1) / 2) * 58;
+    ctx.font = font; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    const words = ln.split(" "); const total = ctx.measureText(ln).width; let x = -total / 2;
+    for (const w of words) {
+      const ww = ctx.measureText(w + " ").width;
+      ctx.lineWidth = 10; ctx.strokeStyle = "rgba(0,0,0,.85)"; ctx.lineJoin = "round"; ctx.strokeText(w, x, y);
+      ctx.fillStyle = HL.test(w) ? C.gold : C.white; ctx.fillText(w, x, y);
+      x += ww;
+    }
+  });
+  ctx.restore();
+}
+
+// ============================================================
+
+// ============================================================
+//  MAIN
+// ============================================================
+function renderFrame(t) {
+  ctx = document.getElementById("c").getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; noShadow();
+  ctx.clearRect(0, 0, W, H);
+  drawBackground(t);
+  scene1(t); scene2(t); scene3(t); scene4(t); scene5(t); scene6(t); scene7(t); scene8(t);
+  captions(t);
+  const fade = Math.max(1 - p(t, 0, .3), p(t, DURATION - .5, DURATION));
+  if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, W, H); }
+}
+window.renderFrame = renderFrame;
+window.DURATION = DURATION;
+window.ready = Promise.all([
+  document.fonts.load(F(900, 40)), document.fonts.load(F(700, 40, "JBM")),
+  imgBg.decode(), ...EXTRA_IMAGES.map(i => i.decode()),
+]).then(() => document.fonts.ready);
+
+// live preview when opened in a browser (no ?render)
+if (!params.has("render")) {
+  window.ready.then(() => {
+    const start = performance.now() - (parseFloat(params.get("t")) || 0) * 1000;
+    const loop = () => { renderFrame(((performance.now() - start) / 1000) % DURATION); requestAnimationFrame(loop); };
+    loop();
+  });
+  document.body.style.cssText = "display:flex;justify-content:center;background:#111";
+  document.getElementById("c").style.cssText = "height:100vh;width:auto";
+}
+</script>
+</body>
+</html>
