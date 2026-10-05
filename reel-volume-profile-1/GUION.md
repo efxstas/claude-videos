@@ -1,6 +1,6 @@
 # Reel · Volume Profile · Parte 1 (POC, VAH y VAL)
 
-Formato nuevo: un trader en su escritorio (3 monitores: footprint arriba, velas y Volume Profile abajo; en la pared, su certificado de payout difuminado) y alguien que entra a preguntarle un concepto.
+Formato nuevo: un trader en su escritorio (3 monitores: footprint arriba, velas y Volume Profile abajo; en la pared, su certificado de payout de MFF por 2.000 $) y alguien que entra a preguntarle un concepto.
 1080×1920 (9:16), 30 fps, **81 s**. Archivo: `out/reel.mp4` (sin subtítulos, solo efectos suaves).
 
 El perfil de volumen del vídeo se calcula de verdad a partir de las 60 velas que aparecen en pantalla:

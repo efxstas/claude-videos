@@ -335,7 +335,7 @@ function grid10(t, t0, results, tRes, opts = {}) {
   }
 }
 
-const imgPayout = new Image(); imgPayout.src = "assets/payout-lucid.webp";
+const imgPayout = new Image(); imgPayout.src = "assets/payout-mff.webp";
 const EXTRA_IMAGES = [imgPayout];
 const TEAL = "#14b8a6", TEAL_SOFT = "#5eead4", VPBLUE = "#3b82f6";
 
@@ -546,13 +546,10 @@ function room(t, st) {
   ctx.save();
   shadow(30, "rgba(0,0,0,.6)", 12);
   rr(118, 430, 400, 300, 8); ctx.fillStyle = "#b08d57"; ctx.fill(); noShadow();
-  rr(130, 442, 376, 276, 4); ctx.fillStyle = "#f8fafc"; ctx.fill();
+  rr(130, 442, 376, 276, 4); ctx.fillStyle = "#0b0f17"; ctx.fill();
   ctx.save(); rr(144, 456, 348, 248, 2); ctx.clip();
-  ctx.filter = "blur(4px)";
   ctx.drawImage(imgPayout, 144, 456, 348, 248);
-  ctx.filter = "none";
   ctx.restore();
-  ctx.fillStyle = "rgba(20,24,40,.12)"; ctx.fillRect(144, 456, 348, 248);
   ctx.restore();
   // letrero neón
   ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = "#22d3ee";
