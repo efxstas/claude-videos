@@ -6,7 +6,7 @@ const DURATION = 85;
 const MAIN_PATHS = [[9, 12, 7], [7, 13, 6], [6, 5, 9], [9, 4, 7], [7, 11, 9], [9, 14, 12], [12, 15, 11], [11, 13, 10], [10, 16, 14]];
 const P_MAIN = tpoProfile({
   paths: MAIN_PATHS,
-  t0: 8.0, dur: [2.6, 1.9, 1.0, .75, .75, .75, .75, .75, .75], gap: .15,
+  t0: 8.6, dur: [2.4, 1.7, .9, .7, .7, .7, .7, .7, .7], gap: .12,
 });
 const IB = { lo: 6, hi: 13 };
 
@@ -26,16 +26,10 @@ const P_TAIL = tpoProfile({
 });
 const TAIL = { sell: [10, 12], buy: [0, 1] };
 
-// cierre: un techo plano, sin tail (el gancho de la parte 2)
-const P_FLAT = tpoProfile({
-  paths: [[3, 6, 1], [1, 0, 4], [4, 7, 5], [5, 7, 3], [3, 7, 4]],
-  t0: 78.2, dur: .24, gap: .03,
-});
-
 // pantallas de la habitación
 const P_MON1 = tpoProfile({ paths: MAIN_PATHS, t0: 0, dur: .5, gap: .05 });
 const P_MON2 = tpoProfile({ paths: SP_PATHS, t0: -99, dur: .1 });
 const P_MON3 = tpoProfile({ paths: TAIL_PATHS, t0: -99, dur: .1 });
 
 // letras que suenan (las de los monitores de la habitación no)
-const SOUND_PROFILES = [P_MAIN, P_SP, P_TAIL, P_FLAT];
+const SOUND_PROFILES = [P_MAIN, P_SP, P_TAIL];

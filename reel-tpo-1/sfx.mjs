@@ -29,21 +29,20 @@ const letterTick = (t, row) => {
   const f = 520 * Math.pow(2, row / 18);
   add(t, .14, (s, k) => (Math.sin(2 * Math.PI * f * s) + .25 * Math.sin(2 * Math.PI * f * 3 * s)) * Math.exp(-k * 9) * env(s, .002), .045, (row % 3 - 1) * .15);
 };
-// golpe de mazo
-const gavel = t => { add(t, .09, (s, k) => rand() * Math.exp(-k * 14), .16); add(t, .5, (s, k) => Math.sin(2 * Math.PI * (210 - 60 * k) * s) * Math.exp(-k * 7), .22); boom(t); };
 
 for (const prof of SOUND_PROFILES) for (const lt of prof.letters) letterTick(lt.t, lt.row - prof.lo);
 
 // tiempos espejo de reel.html (TPO · Parte 1)
 for (let t = .1; t < 3.0; t += .11 + (Math.sin(t * 7) + 1) * .03) click(t);
 [.3, .6, .9, 1.2].forEach(t => thud(t, .1));
-pop(1.4, 500); whoosh(4.2); pop(4.6, 700); pop(5.1, 600);
-pop(7.6, 500); [7.9, 10.8, 13.8].forEach(t => pop(t, 650));
+pop(1.4, 500); whoosh(4.4); boom(4.9); pop(5.0, 700); pop(5.6, 600);
+whoosh(7.9); pop(8.0, 500); [8.4, 11.2, 13.8].forEach(t => pop(t, 650));
 whoosh(20.1); pop(21.0, 650); ding(21.4, 1318); pop(22.5, 800); pop(22.8, 700); pop(26.4, 650);
 whoosh(35.0); ding(42.3, 1568); pop(43.0, 800); pop(42.6, 650); pop(45.0, 650); pop(48.3, 650); ding(48.4, 1175);
 whoosh(52.0); ding(58.6, 1318); ding(59.8, 1046); pop(60.8, 800); pop(61.0, 750); pop(58.8, 650); pop(61.6, 650); pop(64.0, 650);
-whoosh(69.8); gavel(71.3); pop(76.3, 500); thud(77.4, .18);
-[79.7, 80.0, 80.25].forEach(glitch); whoosh(80.9); boom(81.5); pop(82.4, 700); pop(83.2, 600);
+whoosh(69.6); pop(70.4, 600); ding(70.9, 1568); pop(76.2, 500); thud(77.3, .18);
+for (let t = 77.4; t < 80.1; t += .23) glitch(t);
+whoosh(80.7); boom(81.3); pop(82.3, 700); pop(83.0, 600);
 
 let peak = 0; for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
 const g = peak > .7 ? .7 / peak : 1;
