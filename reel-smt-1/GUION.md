@@ -1,6 +1,6 @@
-# Reel · SMT · Parte 1 (NQ vs ES)
+# Reel · SMT · NQ vs ES
 
-1080×1920 (9:16), 30 fps, **86 s**. Archivo: `out/reel.mp4` (sin subtítulos ni música; solo efectos suaves).
+1080×1920 (9:16), 30 fps, **75 s**. Archivo: `out/reel.mp4` (sin subtítulos ni música; solo efectos suaves).
 Tono educativo y solo informativo: qué es y cómo se lee, nunca qué hacer.
 
 **Datos reales:** todas las velas del vídeo salen de tus capturas de TradingView (NQ y ES, 1 min, sesión de 10:20 a 13:10).
@@ -23,12 +23,10 @@ Ritmo ≈ 3 palabras/segundo. Graba cada bloque por separado y colócalo al inic
 | **0:31 – 0:34,6** | Tu captura real de TradingView · "misma temporalidad (1 min) · misma hora" | "Así se ve en TradingView: misma temporalidad, misma hora." |
 | **0:34,6 – 0:40** | **Bajista**: el mismo ejemplo en espejo · NQ "máximo MÁS ALTO", ES "✗ no confirma · máximo MÁS BAJO" | "La bajista es lo mismo, pero en máximos: uno hace un máximo más alto y el otro no lo confirma." |
 | **0:40 – 1:00** | **¿Dónde se suele mirar?** NQ de toda la sesión con mínimo de sesión, máximo anterior y mínimo anterior · "SMT en zona de liquidez" · recuadro "mitad de rango" | "¿Y dónde se suele mirar? En zonas de liquidez: máximos y mínimos anteriores, y máximos y mínimos de la sesión. Ahí es donde una SMT suele tener más peso. En mitad de un rango, en cambio, no significa lo mismo." |
-| **1:00 – 1:15** | **Errores típicos al leerla**: 1 · temporalidades distintas (1 min ≠ 5 min) · 2 · mecha en uno, cierre en el otro · 3 · horas de sesión que no coinciden ("misma vela, distinta hora") | "Y tres errores típicos al leerla. Uno: comparar temporalidades distintas. Dos: mirar la mecha en un gráfico y el cierre en el otro. Tres: usar horas de sesión que no coinciden." |
-| **1:15 – 1:21** | Fondo de los dos caminos · "Esto es lo básico." · "Lo que de verdad importa no cabe en un reel." | "Esto es lo básico. Lo que de verdad importa… no cabe en un reel." |
-| **1:21 – 1:26** | Fundido a negro · **SMT · Parte 2** · @alt_stas · aviso educativo | "SMT, parte 2." |
+| **1:00 – 1:15** | **Errores típicos al leerla**: 1 · temporalidades distintas (1 min ≠ 5 min) · 2 · mecha en uno, cierre en el otro · 3 · horas de sesión que no coinciden ("misma vela, distinta hora") | "Y tres errores típicos al leerla. Uno: comparar temporalidades distintas. Dos: mirar la mecha en un gráfico y el cierre en el otro. Tres: usar horas de sesión que no coinciden." *(Al final aparecen @alt_stas y el aviso de contenido educativo; el vídeo termina en 1:15.)* |
 
 ### Texto sugerido para la descripción
-> SMT, parte 1: NQ y ES, dos hermanos que se mueven igual… hasta que uno no confirma. Qué es una divergencia SMT, dónde se suele mirar y tres errores típicos al leerla. Esto es lo básico. Contenido educativo, no es consejo financiero.
+> SMT: NQ y ES, dos hermanos que se mueven igual… hasta que uno no confirma. Qué es una divergencia SMT, dónde se suele mirar y tres errores típicos al leerla. Contenido educativo, no es consejo financiero.
 
 ## Archivos
 

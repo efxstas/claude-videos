@@ -1,6 +1,6 @@
 // Soft sound effects for part 2 (no music). Writes assets/sfx.wav
 import { writeFileSync } from "node:fs";
-const SR = 44100, DUR = 86, N = SR * DUR;
+const SR = 44100, DUR = 75, N = SR * DUR;
 const L = new Float32Array(N), R = new Float32Array(N);
 let seed = 1; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647 * 2 - 1;
 function add(t0, len, fn, gain = 1) {
@@ -21,7 +21,7 @@ const shot = t => { add(t, .35, (s, k) => rand() * Math.exp(-k * 12), .12); thud
 const click = t => add(t, .03, (s, k) => rand() * Math.exp(-k * 8) * .5, .03);
 for (let t = .2; t < 2.5; t += .09) click(t);                       // velas entrando
 boom(2.5); thud(2.5); pop(2.9, 500); pop(3.1, 700);
-[4.4, 18, 31, 34.6, 40, 60, 75].forEach(whoosh);
+[4.4, 18, 31, 34.6, 40, 60].forEach(whoosh);
 pop(4.9, 500); pop(5.5, 600); riser(7.2, .6); ding(7.8, 1318);
 riser(10.4, 3.0); ding(13.9, 1568);
 for (let t = 18.6; t < 25; t += .2) click(t);
@@ -32,8 +32,6 @@ thud(37.9); pop(38.0, 600); pop(38.6, 500); ding(39.0, 1318);
 [41.6, 43.4, 45.2].forEach(t => pop(t, 600)); ding(47.6, 1568); thud(51.8);
 [42.0, 44.6, 52.4].forEach(t => pop(t, 400));
 pop(60.6, 500); thud(62.4); pop(65.3, 500); thud(67.6); pop(70.3, 500); whoosh(71.6); thud(73.0);
-pop(75.4, 400); pop(77.4, 400); pop(78.0, 600);
-boom(81.8); pop(83.4, 500);
 
 let peak = 0; for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
 const g = peak > .7 ? .7 / peak : 1;

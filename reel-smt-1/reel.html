@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>SMT Parte 1</title>
+<title>SMT NQ vs ES</title>
 <style>
   @font-face { font-family: "Inter"; src: url(assets/fonts/Inter.woff2) format("woff2"); font-weight: 100 900; }
   @font-face { font-family: "JBM"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 700; }
@@ -22,7 +22,7 @@ const CONFIG = {
   captions: params.get("captions") === "1",
 };
 const W = 1080, H = 1920;
-const DURATION = 86;
+const DURATION = 75;
 
 const C = {
   green: "#22c55e", greenSoft: "#4ade80", red: "#ef4444", redSoft: "#f87171",
@@ -399,9 +399,9 @@ function breathe(t, color, x, y, r, base = .18) {
 function bg(t) {
   ctx.fillStyle = "#05070c"; ctx.fillRect(0, 0, W, H);
   // 0–4.4 y 75–86: los dos caminos de luz · resto: el escritorio de noche
-  const paths = t < 4.4 || t > 74.8;
+  const paths = t < 4.4;
   if (paths) {
-    const a = t < 4.4 ? 0 : 74.8, b = t < 4.4 ? 4.4 : 86;
+    const a = 0, b = 4.4;
     layer(imgPaths, t, 1.04, 1.14, a, b, 0, -20);
     breathe(t, "rgba(250,204,21,A)", 380, 1500, 520, .14);
     breathe(t + 1.3, "rgba(226,232,240,A)", 700, 1500, 520, .12);
@@ -513,7 +513,7 @@ const NQ_S = lowIn("NQ", 625, 650), ES_S = lowIn("ES", 625, 650);
 // ============================================================
 function scene1(t) {
   if (t > 4.6) return;
-  chip("SMT · PARTE 1", t, 0, 4.4);
+  chip("SMT · NQ vs ES", t, 0, 4.4);
   headline([["Dos hermanos. Siempre hacen lo mismo…", C.white]], t, .15, 4.4, 330, 42);
   headline([["…hasta que uno ", C.white], ["miente.", C.gold]], t, 2.5, 4.4, 405, 58);
   const al = sceneAlpha(t, 0, 4.4, .25, .3);
@@ -536,7 +536,7 @@ function scene1(t) {
 // ============================================================
 function scene2(t) {
   if (t < 4.2 || t > 18.4) return;
-  chip("SMT · PARTE 1", t, 4.4, 18);
+  chip("SMT · NQ vs ES", t, 4.4, 18);
   headline([["¿Por qué van ", C.white], ["juntos", C.gold], ["?", C.white]], t, 4.5, 18, 330, 58);
   const al = sceneAlpha(t, 4.4, 18, .35, .35);
   withAlpha(al, () => {
@@ -584,7 +584,7 @@ function scene2(t) {
 // ============================================================
 function scene3(t) {
   if (t < 17.8 || t > 31.2) return;
-  chip("SMT · PARTE 1", t, 18, 31);
+  chip("SMT · NQ vs ES", t, 18, 31);
   headline([["Divergencia ", C.white], ["SMT", C.gold]], t, 18.1, 31, 330, 60);
   const al = sceneAlpha(t, 18, 31, .35, .35);
   withAlpha(al, () => {
@@ -661,7 +661,7 @@ function hlevel(P, p, color, label, k, x0m, x1m, side = "left") {
 }
 function scene4(t) {
   if (t < 39.8 || t > 60.4) return;
-  chip("SMT · PARTE 1", t, 40, 60);
+  chip("SMT · NQ vs ES", t, 40, 60);
   headline([["¿Dónde se ", C.white], ["suele mirar", C.gold], ["?", C.white]], t, 40.1, 60, 330, 56);
   const al = sceneAlpha(t, 40, 60, .35, .35);
   withAlpha(al, () => {
@@ -704,7 +704,7 @@ function bigX(x, y, k) {
 }
 function scene5(t) {
   if (t < 59.8 || t > 75.2) return;
-  chip("SMT · PARTE 1", t, 60, 75);
+  chip("SMT · NQ vs ES", t, 60, 75);
   headline([["Errores típicos al ", C.white], ["leerla", C.redSoft]], t, 60.1, 75, 330, 54);
   // 1 · temporalidades distintas
   if (t < 65.4) {
@@ -763,6 +763,10 @@ function scene5(t) {
       bigX(W / 2, 1180, pe(t, 72.8, 73.2, backOut));
     });
   }
+  withAlpha(pe(t, 73.0, 73.4), () => {
+    text(CONFIG.handle, W / 2, 1330, F(800, 40), C.muted);
+    text("Contenido educativo · No es consejo financiero", W / 2, 1390, F(600, 26), "rgba(255,255,255,.55)");
+  });
 }
 
 // ============================================================
@@ -799,8 +803,6 @@ const VO = [
   [34.8, 40.0, "La bajista es lo mismo, pero en máximos: uno hace un máximo más alto y el otro no lo confirma."],
   [40.2, 60.0, "¿Y dónde se suele mirar? En zonas de liquidez: máximos y mínimos anteriores, y máximos y mínimos de la sesión. Ahí es donde una SMT suele tener más peso. En mitad de un rango, en cambio, no significa lo mismo."],
   [60.2, 75.0, "Y tres errores típicos al leerla. Uno: comparar temporalidades distintas. Dos: mirar la mecha en un gráfico y el cierre en el otro. Tres: usar horas de sesión que no coinciden."],
-  [75.4, 81.0, "Esto es lo básico. Lo que de verdad importa… no cabe en un reel."],
-  [81.8, 86.0, "SMT, parte 2."],
 ];
 
 const CAPS = [];
@@ -844,7 +846,7 @@ function renderFrame(t) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; noShadow();
   ctx.clearRect(0, 0, W, H);
   bg(t);
-  scene1(t); scene2(t); scene3(t); scene3b(t); scene3c(t); scene4(t); scene5(t); scene6(t);
+  scene1(t); scene2(t); scene3(t); scene3b(t); scene3c(t); scene4(t); scene5(t);
   captions(t);
   const fade = Math.max(1 - p(t, 0, .3), p(t, DURATION - .5, DURATION));
   if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, W, H); }
