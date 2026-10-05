@@ -335,7 +335,8 @@ function grid10(t, t0, results, tRes, opts = {}) {
   }
 }
 
-const EXTRA_IMAGES = [];
+const imgPayout = new Image(); imgPayout.src = "assets/payout-lucid.webp";
+const EXTRA_IMAGES = [imgPayout];
 const TEAL = "#14b8a6", TEAL_SOFT = "#5eead4", VPBLUE = "#3b82f6";
 
 // ============================================================
@@ -541,11 +542,17 @@ function room(t, st) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, "#151a2e"); g.addColorStop(.75, "#241b33"); g.addColorStop(.76, "#17131f"); g.addColorStop(1, "#0e0b14");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  // cuadro con tu gráfico en la pared
-  ctx.save(); ctx.globalAlpha = .9;
-  rr(110, 430, 430, 290, 10); ctx.fillStyle = "#0b0f17"; ctx.fill();
-  ctx.drawImage(imgBg, 0, 0, imgBg.naturalWidth, imgBg.naturalHeight, 125, 445, 400, 260);
-  ctx.fillStyle = "rgba(10,14,25,.35)"; ctx.fillRect(125, 445, 400, 260);
+  // tu certificado de payout enmarcado (difuminado) en la pared
+  ctx.save();
+  shadow(30, "rgba(0,0,0,.6)", 12);
+  rr(118, 430, 400, 300, 8); ctx.fillStyle = "#b08d57"; ctx.fill(); noShadow();
+  rr(130, 442, 376, 276, 4); ctx.fillStyle = "#f8fafc"; ctx.fill();
+  ctx.save(); rr(144, 456, 348, 248, 2); ctx.clip();
+  ctx.filter = "blur(4px)";
+  ctx.drawImage(imgPayout, 144, 456, 348, 248);
+  ctx.filter = "none";
+  ctx.restore();
+  ctx.fillStyle = "rgba(20,24,40,.12)"; ctx.fillRect(144, 456, 348, 248);
   ctx.restore();
   // letrero neón
   ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = "#22d3ee";
@@ -560,6 +567,9 @@ function room(t, st) {
   ctx.fillStyle = "#5b4636"; rr(60, 1245, 560, 30, 8); ctx.fill();
   ctx.fillStyle = "#3f3127"; ctx.fillRect(80, 1275, 26, 330); ctx.fillRect(574, 1275, 26, 330);
   // monitores
+  // monitor superior con footprint (brazo detrás)
+  ctx.fillStyle = "#111827"; ctx.fillRect(344, 960, 16, 285);
+  footprintMonitor(200, 785, 305, 172, t);
   monitor(95, 985, 250, 165, t, 0); monitor(360, 985, 250, 165, t, 1);
   // teclado + taza
   rr(400, 1228, 170, 16, 5); ctx.fillStyle = "#1f2937"; ctx.fill();
@@ -567,6 +577,37 @@ function room(t, st) {
   ctx.strokeStyle = "#e5e7eb"; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(152, 1218, 12, -Math.PI / 2, Math.PI / 2); ctx.stroke();
   trader(t, st.turn, st.typing, st.traderTalk);
   if (st.visitorX < W + 150) visitor(t, st.visitorX, st.walking, st.visitorTalk);
+}
+// footprint: velas con celdas bid x ask por precio, desequilibrios marcados
+const FP = (() => {
+  let s = 777; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  return Array.from({ length: 6 }, (_, c) => {
+    const base = Math.floor(r() * 3), rows = 6 + Math.floor(r() * 3), up = r() > .45;
+    return { base, up, cells: Array.from({ length: rows }, () => [Math.floor(r() * 90), Math.floor(r() * 90)]) };
+  });
+})();
+function footprintMonitor(x, y, w, h, t) {
+  ctx.fillStyle = "#0b0f17"; rr(x - 8, y - 8, w + 16, h + 16, 10); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.fillStyle = "#0f172a"; ctx.fillRect(x, y, w, h);
+  const cw = 48, rh = 14, live = Math.floor(t * 4);
+  FP.forEach((cd, c) => {
+    const cx = x + 8 + c * (cw + 2);
+    cd.cells.forEach(([bid, ask], i) => {
+      if (c === FP.length - 1) { bid = (bid + live * 7 * (i + 1)) % 90; ask = (ask + live * 11 * (i + 2)) % 90; }
+      const cy = y + h - 12 - (cd.base + i + 1) * rh;
+      const d = (ask - bid) / 90;
+      ctx.fillStyle = d > 0 ? `rgba(34,197,94,${.15 + d * .6})` : `rgba(239,68,68,${.15 - d * .6})`;
+      ctx.fillRect(cx, cy, cw, rh - 1);
+      ctx.font = F(700, 10, "JBM"); ctx.fillStyle = "#e5e7eb"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(bid + "x" + ask, cx + cw / 2, cy + rh / 2);
+      if (Math.abs(ask - bid) > 60) { ctx.strokeStyle = C.gold; ctx.lineWidth = 1.5; ctx.strokeRect(cx + .5, cy + .5, cw - 1, rh - 2); }
+    });
+    const top = y + h - 12 - (cd.base + cd.cells.length) * rh, bot = y + h - 12 - cd.base * rh;
+    ctx.fillStyle = cd.up ? "#22c55e" : "#ef4444"; ctx.fillRect(cx - 4, top, 3, bot - top);
+  });
+  ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = F(800, 11); ctx.textAlign = "left"; ctx.fillText("FOOTPRINT", x + 8, y + 12);
+  ctx.restore();
 }
 function monitor(x, y, w, h, t, kind) {
   ctx.fillStyle = "#0b0f17"; rr(x - 8, y - 8, w + 16, h + 16, 10); ctx.fill();
