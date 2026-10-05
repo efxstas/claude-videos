@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TPO Parte 2</title>
+<style>
+  @font-face { font-family: "Inter"; src: url(assets/fonts/Inter.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JBM"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 700; }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script src="tpo.js"></script>
+<script src="common.js"></script>
+<script src="datos.js"></script>
+<script>
+// ============================================================
+//  TPO · PARTE 2 — "Las subastas que no terminan"  (85 s)
+// ============================================================
+const CHIP = "TPO · PARTE 2";
+const AMBER_SOFT = "#fcd34d";
+// capturas reales opcionales: pon estos archivos en assets/ y salen solas
+const PROOF = { ph: optionalImage("assets/prueba-poor-high.png"), pl: optionalImage("assets/prueba-poor-low.png"), ufa: optionalImage("assets/prueba-ufa.png") };
+
+function ROOM_MONITORS(t) {
+  footprintMonitor(200, 785, 305, 172, t);
+  tpoMonitor(95, 985, 250, 165, t, P_MON2);
+  tpoMonitor(360, 985, 250, 165, t, P_MON3, true);
+}
+
+// ============================================================
+//  ESCENA 1 : gancho (0–6.8)
+// ============================================================
+function scene1(t) {
+  if (t > 6.9) return;
+  const walkIn = pe(t, .2, 1.4, easeOut);
+  zoomInto(t, 5.9, 6.9, 352, 900, () => room(t, {
+    turn: pe(t, 4.0, 4.35, easeInOut), typing: t < 4.0,
+    visitorX: lerp(W + 140, 960, walkIn), walking: t > .2 && t < 1.4, raise: pe(t, 1.5, 1.8),
+    visitorTalk: t > 1.7 && t < 4.0 ? t : 0, traderTalk: t > 4.5 && t < 6.2 ? t : 0,
+  }));
+  speech("¿Cómo que algunas subastas no terminan?", 480, 610, 560, 950, 1040, t, 1.6, 4.3);
+  speech("Mira los extremos del perfil.", 300, 800, 520, 740, 1040, t, 4.4, 6.6);
+  chip(CHIP, t, .2, 6.4);
+}
+
+// ============================================================
+//  PANEL (6.8–65)
+// ============================================================
+function panelScene(t) {
+  if (t < 6.7 || t > 65.2) return;
+  chip(CHIP, t, 6.8, 65);
+  tpoPanel(sceneAlpha(t, 6.8, 65, .5, .5));
+}
+const dimmed = (on, k) => L => on(L) ? T.letter : `rgba(230,237,243,${lerp(1, .45, k)})`;
+// línea blanca que marca el "techo" o el "suelo" plano
+function flatLine(g, y, cols, k, label, below) {
+  if (k <= 0) return;
+  const x0 = g.xc(0) - 24, x1 = g.xc(cols - 1) + 24;
+  ctx.strokeStyle = C.white; ctx.lineWidth = 5; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(lerp(x0, x1, k), y); ctx.stroke();
+  withAlpha(p(k, .7, 1), () => text(label, (x0 + x1) / 2, y + (below ? 34 : -30), F(900, 28), C.white));
+}
+
+// ---------- 7–19: repaso, terminada vs sin terminar ----------
+function sceneRecap(t) {
+  if (t < 6.8 || t > 19.4) return;
+  conceptHeader("¿Terminada o no?", "Repaso de la parte 1 · los extremos", null, t, 7.2, 19);
+  withAlpha(1 - p(t, 18.6, 19.1), () => {
+    const gL = tpoGeom(P_DONE, { rh: 54, cw: 44, size: 38, x: 170, cy: 820 });
+    const gR = tpoGeom(P_OPEN, { rh: 54, cw: 44, size: 38, x: 640, cy: 874 });
+    ctx.strokeStyle = T.line; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(540, PANEL.y + 40); ctx.lineTo(540, PANEL.y + PANEL.h - 40); ctx.stroke();
+    tpoBand(gL, 7, 9, T.redFill, T.red, "tail", pe(t, 13.2, 13.6), { x0: 90, x1: 520, size: 26 });
+    tpoBand(gR, 7, 7, T.amberFill, T.amber, "?", pe(t, 14.6, 15.0), { x0: 560, x1: 990, size: 32 });
+    tpoLetters(gL, t); tpoLetters(gR, t);
+    const yb = PANEL.y + PANEL.h - 60;
+    withAlpha(pe(t, 13.4, 13.8), () => { tagChip("EXCESS ✓", 300, yb, T.teal, 1, popScale(t, 13.4)); });
+    withAlpha(pe(t, 14.8, 15.2), () => { tagChip("SIN TAIL ✗", 780, yb, T.amber, 1, popScale(t, 14.8)); });
+  });
+  infoCards([
+    [13.4, "PARTE 1", "Tail en el extremo = la subasta terminó."],
+    [15.6, null, "Sin tail, el extremo se queda… a medias.", AMBER_SOFT],
+  ], t, 13.3, 19);
+}
+
+// ---------- 19–35: poor high ----------
+const gPH = prof => tpoGeom(prof, { rh: 54, cw: 48, size: 40, x: 340 });
+function scenePH(t) {
+  if (t < 19 || t > 35.2) return;
+  const g = gPH(P_PH);
+  conceptHeader("Poor high", "Poor high · techo plano · etiqueta:", "POOR H", t, 19.1, 35);
+  withAlpha(1 - p(t, 34.5, 35.0), () => {
+    const k = pe(t, 26.0, 26.6, easeInOut), d = pe(t, 26.0, 26.6);
+    tpoBand(g, PH.top, PH.top, T.amberFill, T.amber, "poor high", pe(t, 26.0, 26.2), { grow: k });
+    tpoBand(g, PH.tail[0], PH.tail[1], "rgba(30,58,138,.30)", "rgba(96,165,250,.8)", "buying tail ✓", pe(t, 30.8, 31.2));
+    tpoLetters(g, t, { color: dimmed(L => L.row === PH.top, d) });
+    flatLine(g, g.top(PH.top) - 2, 4, pe(t, 27.0, 27.6, easeInOut), "techo plano");
+    tagChip("POOR H", PANEL.x + 130, g.y(PH.top), T.amber, 1, popScale(t, 26.6));
+  });
+  infoCards([
+    [26.2, "CÓMO SE VE", "El techo del perfil es plano: varias letras distintas en la misma fila, sin tail."],
+    [29.6, "QUÉ SIGNIFICA", "Arriba no hubo un rechazo fuerte: la subasta en ese extremo quedó débil, sin terminar.", AMBER_SOFT],
+  ], t, 26.1, 34.8);
+  proof(PROOF.ph, "Poor high en mi gráfico", t, 32.0, 34.8);
+}
+
+// ---------- 35–49: poor low ----------
+function scenePL(t) {
+  if (t < 35 || t > 49.2) return;
+  const g = gPH(P_PL);
+  conceptHeader("Poor low", "Poor low · suelo plano · etiqueta:", "POOR L", t, 35.1, 49);
+  withAlpha(1 - p(t, 48.5, 49.0), () => {
+    const k = pe(t, 41.5, 42.1, easeInOut), d = pe(t, 41.5, 42.1);
+    tpoBand(g, PL.bot, PL.bot, T.amberFill, T.amber, "poor low", pe(t, 41.5, 41.7), { grow: k });
+    tpoBand(g, PL.tail[0], PL.tail[1], "rgba(127,29,29,.35)", "rgba(248,113,113,.85)", "selling tail ✓", pe(t, 45.4, 45.8));
+    tpoLetters(g, t, { color: dimmed(L => L.row === PL.bot, d) });
+    flatLine(g, g.bot(PL.bot) + 2, 3, pe(t, 42.4, 43.0, easeInOut), "suelo plano", true);
+    tagChip("POOR L", PANEL.x + 130, g.y(PL.bot), T.amber, 1, popScale(t, 42.1));
+  });
+  infoCards([
+    [41.7, "CÓMO SE VE", "Lo mismo, en el suelo del perfil: varias letras en la fila más baja, sin buying tail."],
+    [44.8, "QUÉ SIGNIFICA", "Abajo tampoco hubo un rechazo claro: subasta débil en ese extremo.", AMBER_SOFT],
+  ], t, 41.6, 48.8);
+  proof(PROOF.pl, "Poor low en mi gráfico", t, 46.4, 48.8);
+}
+
+// ---------- 49–65: UFA ----------
+// celda del footprint (bid × ask) junto al extremo
+function fpCallout(x, y, bid, ask, color, note, k, zeroSide) {
+  if (k <= 0) return;
+  withAlpha(k, () => scaled(x + 150, y, .85 + .15 * backOut(k), () => {
+    rr(x, y - 52, 300, 104, 16); ctx.fillStyle = "rgba(15,23,42,.96)"; ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
+    text("bid × ask", x + 150, y - 30, MONO(20), T.kicker);
+    const bc = zeroSide === "bid" ? T.blue : color, ac = zeroSide === "ask" ? T.blue : color;
+    text(String(bid), x + 95, y + 14, MONO(44), bc, "right");
+    text("×", x + 150, y + 14, MONO(36), T.kicker);
+    text(String(ask), x + 205, y + 14, MONO(44), ac, "left");
+    if (note) text(note, x + 150, y + 82, F(800, 26), color);
+  }));
+}
+function sceneUFA(t) {
+  if (t < 49 || t > 65.2) return;
+  const g = gPH(P_UFA);
+  conceptHeader("Unfinished auction", "UFA · subasta sin terminar · etiqueta:", "UFA", t, 49.1, 65);
+  withAlpha(1 - p(t, 64.5, 65.0), () => {
+    tpoBand(g, PH.top, PH.top, T.amberFill, T.amber, null, pe(t, 52.8, 53.2));
+    tpoBand(g, PH.tail[0], PH.tail[1], "rgba(30,58,138,.30)", T.blue, null, pe(t, 55.2, 55.6));
+    tpoLetters(g, t, { color: dimmed(L => L.row === PH.top || L.row <= PH.tail[1], pe(t, 52.8, 53.4)) });
+    tagChip("UFA", PANEL.x + 120, g.y(PH.top), T.amber, 1, popScale(t, 53.0));
+    // flechas del extremo a su celda del footprint
+    const ka = pe(t, 53.4, 53.9), kb = pe(t, 55.4, 55.9);
+    withAlpha(ka, () => { ctx.strokeStyle = T.amber; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(g.xc(4), g.y(PH.top)); ctx.lineTo(680, g.y(PH.top) + 40); ctx.stroke(); ctx.setLineDash([]); });
+    withAlpha(kb, () => { ctx.strokeStyle = T.blue; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(g.xc(1), g.y(0)); ctx.lineTo(680, g.y(1) - 10); ctx.stroke(); ctx.setLineDash([]); });
+    fpCallout(680, g.y(PH.top) + 40, 27, 31, T.amber, "compras Y ventas", ka);
+    fpCallout(680, g.y(1) - 30, 0, 38, T.blue, "un lado a cero ✓", kb, "bid");
+  });
+  infoCards([
+    [53.6, "CÓMO SE VE", "En el footprint, el último precio del extremo tiene compras Y ventas: ningún lado a cero."],
+    [57.8, "QUÉ SIGNIFICA", "La subasta no terminó: aún había interés en los dos lados. Suele coincidir con un poor high o low.", AMBER_SOFT],
+  ], t, 53.5, 64.8);
+  proof(PROOF.ufa, "UFA en mi gráfico", t, 61.4, 64.8);
+}
+
+// ============================================================
+//  ESCENA 6 : resumen (65–72)
+// ============================================================
+function miniTPO(x, y, rows, hl, col) {
+  rows.forEach((s, i) => {
+    if (hl.includes(i)) { rr(x - 14, y + i * 36 - 16, 210, 32, 6); ctx.fillStyle = col + "33"; ctx.fill(); }
+    text(s, x, y + i * 36, MONO(26), hl.includes(i) ? T.letter : "rgba(230,237,243,.5)", "left");
+  });
+}
+function sceneSummary(t) {
+  if (t < 64.8 || t > 72.4) return;
+  headline([["Terminada", T.teal], [" o ", C.white], ["a medias", T.amber]], t, 65.1, 72, 330, 60);
+  withAlpha(sceneAlpha(t, 65, 72, .4, .35), () => {
+    const cards = [
+      ["EXCESS", "tail → subasta terminada", ["C", "C", "B C D", "A B C D"], [0, 1], T.teal],
+      ["POOR H / L", "extremo plano, sin tail", ["C D F G", "C D F G", "B C D E F"], [0], T.amber],
+      ["UFA", "compras y ventas en el extremo", ["C D F G", "27 × 31", "B C D E F"], [1], T.amber],
+    ];
+    cards.forEach(([name, desc, rows, hl, col], i) => {
+      const y = 450 + i * 330, k = pe(t, 65.5 + i * .5, 66.0 + i * .5, backOut);
+      if (k <= 0) return;
+      ctx.save(); ctx.translate((1 - k) * 300, 0); ctx.globalAlpha *= clamp(k);
+      rr(70, y, 940, 290, 30); ctx.fillStyle = "rgba(13,17,23,.92)"; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+      miniTPO(120, y + 90, rows, hl, col);
+      text(name, 390, y + 115, F(900, 62), col, "left");
+      text(desc, 392, y + 195, F(700, 34), C.white, "left");
+      ctx.restore();
+    });
+  });
+}
+
+// ============================================================
+//  ESCENA 7 : vuelta a la habitación · el ego (72–80)
+// ============================================================
+function scene7(t) {
+  if (t < 71.9 || t > 80.2) return;
+  zoomOutOf(t, 72, 72.8, 352, 900, () => room(t, {
+    turn: 1, typing: false, visitorX: 960, walking: false, shades: pe(t, 75.8, 76.4, easeOut),
+    visitorTalk: t > 73.0 && t < 75.4 ? t : 0, traderTalk: t > 76.2 && t < 79.4 ? t : 0,
+  }));
+  speech("¿Y qué pasa luego con las que no terminan?", 480, 610, 560, 950, 1040, t, 73.0, 75.8);
+  speech("Eso… ya es información confidencial.", 260, 790, 580, 740, 1040, t, 76.0, 79.9);
+}
+
+// ============================================================
+//  ESCENA 8 : cierre (80–85)
+// ============================================================
+function scene8(t) {
+  if (t < 79.7) return;
+  ctx.fillStyle = `rgba(0,0,0,${.92 * pe(t, 79.7, 80.3)})`; ctx.fillRect(0, 0, W, H);
+  headline([["El mercado ", C.white], ["odia", T.amber]], t, 80.4, 85.5, 760, 70);
+  headline([["dejar cosas a medias.", C.white]], t, 80.8, 85.5, 850, 70);
+  withAlpha(pe(t, 81.9, 82.3), () => {
+    text("Lo que pasa después…", W / 2, 1010, F(800, 42), C.gold);
+    text("solo lo ven los que me siguen.", W / 2, 1066, F(800, 42), C.gold);
+  });
+  withAlpha(pe(t, 83.0, 83.4), () => {
+    text(CONFIG.handle, W / 2, 1180, F(800, 44), C.muted);
+    text("TPO · continuará", W / 2, 1250, MONO(28), T.teal);
+  });
+}
+
+// ============================================================
+//  NARRACIÓN (subtítulos opcionales con --captions)
+// ============================================================
+const VO = [
+  [1.7, 4.0, "¿Cómo que algunas subastas no terminan?"],
+  [4.5, 6.2, "Mira los extremos del perfil."],
+  [7.4, 18.8, "En la parte 1 viste la tail: la misma letra en el extremo. Eso es una subasta terminada. Pero cuando el extremo no tiene tail… la subasta se queda a medias."],
+  [19.4, 34.6, "Primero, el poor high. El techo del perfil es plano: varias letras distintas en la misma fila, y ninguna por encima. Sin tail. Significa que arriba no hubo un rechazo fuerte: la subasta en ese extremo quedó débil, sin terminar."],
+  [35.4, 48.6, "El poor low es lo mismo, pero en el suelo del perfil. Varias letras alineadas en la fila más baja, sin buying tail. Abajo tampoco hubo un rechazo claro."],
+  [49.4, 64.6, "Y la UFA, unfinished auction. Si miras el footprint en ese extremo, en el último precio hubo compras y ventas. En una subasta terminada, un lado se queda a cero. Aquí no: había interés en los dos lados. Suele coincidir con un poor high o un poor low."],
+  [65.3, 71.6, "Tail: subasta terminada. Poor high, poor low y UFA: subastas a medias."],
+  [73.0, 75.4, "¿Y qué pasa luego con las que no terminan?"],
+  [76.2, 79.4, "Eso… ya es información confidencial."],
+  [80.4, 84.6, "El mercado odia dejar cosas a medias. Lo que pasa después… solo lo ven los que me siguen."],
+];
+
+const SCENES = [scene1, panelScene, sceneRecap, scenePH, scenePL, sceneUFA, sceneSummary, scene7, scene8];
+boot();
+</script>
+</body>
+</html>

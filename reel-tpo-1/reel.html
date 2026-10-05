@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>TPO Parte 1</title>
+<style>
+  @font-face { font-family: "Inter"; src: url(assets/fonts/Inter.woff2) format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "JBM"; src: url(assets/fonts/JetBrainsMono.woff2) format("woff2"); font-weight: 700; }
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script src="tpo.js"></script>
+<script src="common.js"></script>
+<script src="datos.js"></script>
+<script>
+// ============================================================
+//  TPO · PARTE 1 — "Cómo se lee una subasta"  (85 s)
+// ============================================================
+const CHIP = "TPO · PARTE 1";
+const imgMazo = new Image(); imgMazo.src = "assets/mazo.webp"; EXTRA_IMAGES.push(imgMazo);
+// capturas reales opcionales: pon estos archivos en assets/ y salen solas
+const PROOF = { ib: optionalImage("assets/prueba-ib.png"), sp: optionalImage("assets/prueba-sp.png"), excess: optionalImage("assets/prueba-excess.png") };
+
+function ROOM_MONITORS(t) {
+  tpoMonitor(200, 785, 305, 172, t, P_MON1, true);
+  tpoMonitor(95, 985, 250, 165, t, P_MON2);
+  tpoMonitor(360, 985, 250, 165, t, P_MON3);
+}
+
+// ============================================================
+//  ESCENA 1 : gancho (0–5)
+// ============================================================
+function scene1(t) {
+  if (t > 4.9) return;
+  const walkIn = pe(t, .2, 1.4, easeOut);
+  zoomInto(t, 3.9, 4.9, 352, 900, () => room(t, {
+    turn: pe(t, 3.0, 3.35, easeInOut), typing: t < 3.0,
+    visitorX: lerp(W + 140, 960, walkIn), walking: t > .2 && t < 1.4, raise: pe(t, 1.3, 1.6),
+    visitorTalk: t > 1.5 && t < 3.3 ? t : 0, traderTalk: t > 3.5 ? t : 0,
+  }));
+  speech("¿Qué es esta sopa de letras?", 480, 640, 560, 950, 1040, t, 1.4, 3.8);
+}
+function hookTitle(t) {
+  if (t < 4.2 || t > 7.8) return;
+  headline([["No son ", C.white], ["letras.", T.teal]], t, 4.6, 7.6, 330, 72);
+  headline([["Es la ", C.white], ["historia", C.gold], [" del día.", C.white]], t, 5.1, 7.6, 425, 72);
+}
+
+// ============================================================
+//  PANEL (5.4–69.8): un único panel; cambian los perfiles
+// ============================================================
+function panelScene(t) {
+  if (t < 5.3 || t > 70.4) return;
+  chip(CHIP, t, 5.4, 69.8);
+  tpoPanel(sceneAlpha(t, 5.4, 69.9, .5, .5));
+}
+
+// ---------- 5–20: qué es el TPO ----------
+const gMain = () => tpoGeom(P_MAIN, { rh: 50, cw: 48, size: 40, x: 340, cy: 885 });
+function sceneTPO(t) {
+  if (t < 5.4 || t > 35.2) return;
+  const g = gMain();
+  conceptHeader("TPO", "Time Price Opportunity · 1 letra = 30 min", null, t, 7.6, 20.1);
+  withAlpha(sceneAlpha(t, 5.6, 19.9, .5, .4), () => priceAxis(g, 21400, 10, 1));
+  // reloj del periodo en curso
+  const pa = t < 19.9 ? priceMarker(g, t, 1) : null;
+  withAlpha(sceneAlpha(t, 7.9, 19.9, .3, .3), () => {
+    const per = pa ? pa.per : P_MAIN.periods.find(q => q.t0 > t) || P_MAIN.periods.at(-1);
+    const i = P_MAIN.periods.indexOf(per);
+    rr(PANEL.x + 28, PANEL.y + 26, 330, 64, 14); ctx.fillStyle = "rgba(255,255,255,.07)"; ctx.fill();
+    text(per.l, PANEL.x + 64, PANEL.y + 59, MONO(40), T.teal);
+    text(nyTime(i) + " NY", PANEL.x + 100, PANEL.y + 59, MONO(28), T.letter, "left");
+  });
+  // 20–35: Initial Balance (A y B)
+  const hl = pe(t, 20.6, 21.2) * (1 - pe(t, 29.6, 30.3));
+  tpoLetters(g, t, { color: L => L.p < 2 ? (hl > 0 ? "#99f6e4" : T.letter) : `rgba(230,237,243,${lerp(1, .22, hl)})` });
+  withAlpha(1 - p(t, 34.5, 35.1), () => {
+    ibBar(g, IB.lo, IB.hi, t, 21.4);
+    withAlpha(pe(t, 23.0, 23.5) * .8, () => {
+      ctx.strokeStyle = T.teal; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
+      [g.top(IB.hi), g.bot(IB.lo)].forEach(y => { ctx.beginPath(); ctx.moveTo(g.x - 30, y); ctx.lineTo(PANEL.x + PANEL.w - 30, y); ctx.stroke(); });
+      ctx.setLineDash([]);
+    });
+    withAlpha(sceneAlpha(t, 21.9, 34.6, .4, .4), () => {
+      rr(PANEL.x + 28, PANEL.y + 26, 600, 64, 14); ctx.fillStyle = "rgba(20,184,166,.16)"; ctx.fill();
+      text("A + B = 9:30–10:30 · la 1.ª hora", PANEL.x + 52, PANEL.y + 59, MONO(28), T.teal, "left");
+    });
+  });
+  infoCards([
+    [7.9, "CÓMO FUNCIONA", "Cada letra es un periodo de 30 minutos."],
+    [10.8, null, "A = 1.er periodo de Nueva York. B = el 2.º, y así."],
+    [13.8, null, "Si el precio pasa por un nivel en ese periodo, se apunta su letra."],
+  ], t, 7.8, 19.9);
+  conceptHeader("Initial Balance", "IB · primera hora · etiqueta:", "IBH / IBL", t, 20.1, 35);
+  infoCards([
+    [21.0, "CÓMO SE VE", "El rango de la primera hora de NY (periodos A y B). Barra vertical a la izquierda del perfil."],
+    [26.4, "QUÉ SIGNIFICA", "El argumento de apertura del día: el primer rango que el mercado establece en la sesión.", "#99f6e4"],
+  ], t, 20.2, 34.8);
+  proof(PROOF.ib, "Initial Balance en mi gráfico", t, 31.2, 34.8);
+}
+
+// ---------- 35–52: single prints ----------
+const gSP = () => tpoGeom(P_SP, { rh: 43, cw: 44, size: 34, x: 340 });
+function sceneSP(t) {
+  if (t < 35 || t > 52.2) return;
+  const g = gSP();
+  conceptHeader("Single prints", "Single prints · etiqueta:", "SP", t, 35.1, 52);
+  withAlpha(1 - p(t, 51.5, 52.0), () => {
+    const k = pe(t, 42.3, 43.0, easeInOut);
+    tpoBand(g, SP.lo, SP.hi, T.tealFill, T.teal, "single prints", pe(t, 42.3, 42.6), { grow: k });
+    tagChip("SP", PANEL.x + 120, (g.top(SP.hi) + g.bot(SP.lo)) / 2, T.teal, 1, popScale(t, 43.0));
+    const isSP = L => L.row >= SP.lo && L.row <= SP.hi;
+    const dim = pe(t, 42.3, 42.9);
+    tpoLetters(g, t, { color: L => isSP(L) ? (dim > 0 ? "#ccfbf1" : T.letter) : `rgba(230,237,243,${lerp(1, .5, dim)})` });
+    // doble distribución: dos bloques separados por los single prints
+    const kb = pe(t, 48.3, 48.9);
+    if (kb > 0) withAlpha(kb, () => {
+      [[SP.d2, "2.ª distribución"], [SP.d1, "1.ª distribución"]].forEach(([[lo, hi], lab]) => {
+        const x = 700, yT = g.top(hi) + 6, yB = g.bot(lo) - 6;
+        ctx.strokeStyle = T.blue; ctx.lineWidth = 4; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(x - 16, yT); ctx.lineTo(x, yT); ctx.lineTo(x, yB); ctx.lineTo(x - 16, yB); ctx.stroke();
+        text(lab, x + 22, (yT + yB) / 2, F(800, 30), T.blue, "left");
+      });
+    });
+  });
+  infoCards([
+    [42.6, "CÓMO SE VE", "Una sola letra (un periodo) en varios niveles seguidos, en medio del perfil."],
+    [45.0, "QUÉ SIGNIFICA", "Movimiento rápido, sin negociación en los dos sentidos. Parecido a un FVG.", "#99f6e4"],
+    [48.3, "EN UNA DOBLE DISTRIBUCIÓN", "Separan los dos bloques del perfil."],
+  ], t, 42.4, 51.9);
+  proof(PROOF.sp, "Single prints en mi gráfico", t, 49.4, 51.9);
+}
+
+// ---------- 52–70: tail / excess ----------
+const gTail = () => tpoGeom(P_TAIL, { rh: 54, cw: 48, size: 40, x: 340 });
+function sceneTail(t) {
+  if (t < 52 || t > 70) return;
+  const g = gTail();
+  conceptHeader("Tail / Excess", "Buying tail · Selling tail · etiqueta:", "EXCESS", t, 52.1, 69.8);
+  withAlpha(1 - p(t, 69.3, 69.8), () => {
+    const ks = pe(t, 58.6, 59.2, easeInOut), kb = pe(t, 59.8, 60.4, easeInOut);
+    tpoBand(g, TAIL.sell[0], TAIL.sell[1], T.redFill, T.red, "selling tail", pe(t, 58.6, 58.8), { grow: ks });
+    tpoBand(g, TAIL.buy[0], TAIL.buy[1], T.blueFill, T.blue, "buying tail", pe(t, 59.8, 60.0), { grow: kb });
+    const inTail = L => (L.row >= TAIL.sell[0]) || (L.row <= TAIL.buy[1]);
+    const dim = pe(t, 58.6, 59.2);
+    tpoLetters(g, t, { color: L => inTail(L) ? T.letter : `rgba(230,237,243,${lerp(1, .5, dim)})` });
+    tagChip("EXCESS", PANEL.x + 130, (g.top(TAIL.sell[1]) + g.bot(TAIL.sell[0])) / 2, T.red, 1, popScale(t, 60.8));
+    tagChip("EXCESS", PANEL.x + 130, (g.top(TAIL.buy[1]) + g.bot(TAIL.buy[0])) / 2, T.blue, 1, popScale(t, 61.0));
+  });
+  infoCards([
+    [58.8, "CÓMO SE VE", "La misma letra repetida en 2 o más filas en el extremo del perfil."],
+    [61.6, null, "Arriba = selling tail. Abajo = buying tail."],
+    [64.0, "QUÉ SIGNIFICA", "Subasta terminada en ese extremo: rechazo fuerte.", "#99f6e4"],
+  ], t, 58.7, 69.6);
+  proof(PROOF.excess, "Tail / excess en mi gráfico", t, 66.4, 69.7);
+}
+
+// ============================================================
+//  ESCENA 6 : cierre (70–85)
+// ============================================================
+function sceneClose(t) {
+  if (t < 69.7) return;
+  const al = pe(t, 69.7, 70.4);
+  // el mazo: la subasta se cierra
+  withAlpha(al * (1 - p(t, 80.6, 81.3)), () => {
+    const z = 1 + .08 * p(t, 69.7, 81), hit = t > 71.3 ? Math.exp(-(t - 71.3) * 7) : 0;
+    const sx = Math.sin(t * 80) * 14 * hit, sy = Math.cos(t * 67) * 10 * hit;
+    const s = Math.max(W / imgMazo.naturalWidth, H / imgMazo.naturalHeight) * z * (1 + .025 * hit);
+    const dw = imgMazo.naturalWidth * s, dh = imgMazo.naturalHeight * s;
+    ctx.drawImage(imgMazo, (W - dw) / 2 + sx, (H - dh) / 2 + sy, dw, dh);
+    ctx.fillStyle = `rgba(0,0,0,${.15 + .55 * pe(t, 75.8, 76.6)})`; ctx.fillRect(0, 0, W, H);
+    // polvo dorado del golpe
+    if (t > 71.3) for (let i = 0; i < 40; i++) {
+      const tt = t - 71.3, a = rnd(i) * Math.PI, sp = 120 + rnd(i + 9) * 420;
+      const x = W / 2 + Math.cos(a) * sp * tt * (i % 2 ? 1 : -1), y = 1330 - Math.sin(a) * sp * tt + 160 * tt * tt;
+      withAlpha(clamp(1 - tt / 2.2) * .9, () => { ctx.fillStyle = "#fcd34d"; ctx.beginPath(); ctx.arc(x, y, 2 + rnd(i + 3) * 4, 0, 7); ctx.fill(); });
+    }
+    flash(t, 71.3, .5);
+    headline([["Una ", C.white], ["tail", T.teal], [" significa", C.white]], t, 70.5, 75.8, 300, 66);
+    headline([["que la subasta ", C.white], ["terminó.", C.gold]], t, 70.9, 75.8, 390, 66);
+    headline([["Pero algunas…", C.white]], t, 76.3, 80.6, 330, 72);
+    headline([["…no terminan.", C.redSoft]], t, 77.4, 80.6, 425, 72);
+    // un techo plano, sin tail: la pregunta que queda abierta
+    const kp = pe(t, 77.9, 78.3);
+    if (kp > 0) withAlpha(kp, () => {
+      const jit = t > 79.7 && (Math.floor(t * 12) % 5 === 0) ? (rnd(Math.floor(t * 12)) - .5) * 26 : 0;
+      ctx.save(); ctx.translate(jit, 0);
+      const g = tpoGeom(P_FLAT, { rh: 50, cw: 46, size: 38, x: 450, cy: 1010 });
+      rr(330, 770, 420, 480, 24); ctx.fillStyle = "rgba(13,17,23,.94)"; ctx.fill(); ctx.strokeStyle = T.line; ctx.lineWidth = 2; ctx.stroke();
+      tpoBand(g, 7, 7, T.amberFill, T.amber, null, pe(t, 79.6, 79.9), { x0: 350, x1: 730 });
+      tpoLetters(g, t);
+      withAlpha(pe(t, 79.7, 80.0) * (.6 + .4 * Math.sin(t * 10)), () => text("?", 690, g.y(7), F(900, 56), T.amber));
+      ctx.restore();
+    });
+  });
+  // fundido a negro: TPO · Parte 2
+  if (t > 80.6) {
+    ctx.fillStyle = `rgba(0,0,0,${pe(t, 80.6, 81.3)})`; ctx.fillRect(0, 0, W, H);
+    const k = popScale(t, 81.5, .55);
+    scaled(W / 2, 860, k, () => {
+      ctx.save(); ctx.shadowBlur = 40; ctx.shadowColor = T.teal;
+      text("TPO · Parte 2", W / 2, 860, F(900, 96), C.white); ctx.restore();
+    });
+    withAlpha(pe(t, 82.4, 82.8), () => text("POOR HIGH · POOR LOW · UFA", W / 2, 965, MONO(34), T.amber));
+    withAlpha(pe(t, 83.2, 83.6), () => {
+      text("Las que no terminan. Sígueme… o te la pierdes.", W / 2, 1100, F(800, 36), C.gold);
+      text(CONFIG.handle, W / 2, 1190, F(800, 44), C.muted);
+    });
+  }
+}
+
+// ============================================================
+//  NARRACIÓN (subtítulos opcionales con --captions)
+// ============================================================
+const VO = [
+  [1.5, 3.4, "¿Qué es esta sopa de letras?"],
+  [3.6, 6.4, "No son letras. Es la historia del día."],
+  [7.4, 19.8, "Cada letra es un periodo de 30 minutos: la A es el primero de la sesión de Nueva York, la B el segundo, y así. Cada vez que el precio pasa por un nivel en ese periodo, se apunta su letra. Y así se forma el perfil."],
+  [20.2, 34.6, "Las dos primeras, A y B, forman el Initial Balance: el rango de la primera hora de Nueva York. Se marca con una barra a la izquierda del perfil: IBH arriba, IBL abajo. Es el primer rango que el mercado establece en la sesión."],
+  [35.2, 51.8, "Ahora, los single prints. Una sola letra, un solo periodo, en varios niveles seguidos, en medio del perfil. Significa que el precio se movió rápido, sin negociación en los dos sentidos. Parecido a un FVG. Y en una doble distribución, son lo que separa los dos bloques."],
+  [52.4, 69.4, "Y la tail, o excess. La misma letra repetida en dos o más filas, en el extremo del perfil. Si está arriba, es una selling tail. Si está abajo, una buying tail. Significa que la subasta terminó en ese extremo: hubo un rechazo fuerte."],
+  [70.6, 75.6, "Una tail significa que la subasta terminó."],
+  [76.3, 80.4, "Pero algunas… no terminan."],
+  [81.6, 84.6, "Eso, en la parte 2. Sígueme… o te la pierdes."],
+];
+
+const SCENES = [scene1, hookTitle, panelScene, sceneTPO, sceneSP, sceneTail, sceneClose];
+boot();
+</script>
+</body>
+</html>
